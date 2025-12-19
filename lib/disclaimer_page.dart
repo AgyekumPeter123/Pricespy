@@ -135,7 +135,7 @@ class DisclaimerPage extends StatelessWidget {
             const Divider(),
             const SizedBox(height: 20),
             Text(
-              "FIND . COMPARE . SAVE",
+              "TRACK . COMPARE . SAVE",
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w900,
