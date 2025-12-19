@@ -169,10 +169,11 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     if (!_isListening) {
       var status = await Permission.microphone.request();
       if (status != PermissionStatus.granted) {
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Microphone permission required")),
           );
+        }
         return;
       }
       bool available = await _speech.initialize(
@@ -210,24 +211,48 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
   }
 
   Future<void> _pickProductImage() async {
+    // 1. Capture/Pick the image using your helper
     final file = await _imageHelper.pickImage();
-    if (file != null) {
-      final cropped = await ImageCropper().cropImage(
-        sourcePath: file.path,
-        uiSettings: [
-          AndroidUiSettings(
-            toolbarTitle: 'Crop',
-            toolbarColor: Colors.green,
-            toolbarWidgetColor: Colors.white,
-            lockAspectRatio: false,
-          ),
-          IOSUiSettings(title: 'Crop'),
-        ],
-      );
-      if (cropped != null) {
-        setState(() => _productImage = File(cropped.path));
-        await _analyzeImage(File(cropped.path));
-      }
+    if (file == null) return;
+
+    // 2. Open the cropper immediately
+    final cropped = await ImageCropper().cropImage(
+      sourcePath: file.path,
+      // FIX: Move presets inside uiSettings to resolve the 'undefined parameter' error
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Edit Product Photo',
+          toolbarColor: Colors.green[800],
+          toolbarWidgetColor: Colors.white,
+          initAspectRatio: CropAspectRatioPreset.square,
+          lockAspectRatio: false,
+          // Correct placement for Android presets
+          aspectRatioPresets: [
+            CropAspectRatioPreset.square,
+            CropAspectRatioPreset.ratio3x2,
+            CropAspectRatioPreset.original,
+          ],
+        ),
+        IOSUiSettings(
+          title: 'Edit Product Photo',
+          // Correct placement for iOS presets
+          aspectRatioPresets: [
+            CropAspectRatioPreset.square,
+            CropAspectRatioPreset.ratio3x2,
+            CropAspectRatioPreset.original,
+          ],
+        ),
+      ],
+    );
+
+    if (cropped != null) {
+      setState(() {
+        _productImage = File(cropped.path);
+        _isAnalyzing = true; // Show loader in the preview box
+      });
+
+      // 3. Start AI analysis after cropping is confirmed
+      await _analyzeImage(File(cropped.path));
     }
   }
 
@@ -257,81 +282,91 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       _isAnalyzing = true;
       _aiSuggestions = [];
     });
+
     final InputImage inputImage = InputImage.fromFile(image);
+
     try {
       final imageLabeler = ImageLabeler(
         options: ImageLabelerOptions(confidenceThreshold: 0.5),
       );
       final labels = await imageLabeler.processImage(inputImage);
+
       final textRecognizer = TextRecognizer();
       final recognizedText = await textRecognizer.processImage(inputImage);
 
       List<String> newSuggestions = [];
       String? foundPrice;
+      String? foundUnit; // NEW: Track the detected measurement unit
+
+      // 1. Label Processing (Product Name Suggestions)
       final List<String> ignoredLabels = [
         'Room',
         'Furniture',
-        'Table',
-        'Design',
-        'Technology',
-        'Electronic device',
-        'Rectangle',
-        'Circle',
-        'Square',
-        'Shape',
-        'Pattern',
-        'Texture',
-        'Close-up',
-        'Hand',
-        'Finger',
-        'Thumb',
-        'Nail',
-        'Flesh',
-        'Skin',
-        'Human',
-        'Person',
-        'Selfie',
         'Metal',
         'Plastic',
         'Glass',
-        'Wood',
-        'Leather',
-        'Denim',
-        'Jeans',
-        'Textile',
-        'Fabric',
-        'Material',
-        'Mesh',
-        'Automotive design',
-        'Automotive tire',
-        'Rim',
-        'Tread',
-        'Synthetic rubber',
-        'Snapshot',
-        'Photography',
-        'Image',
-        'Color',
+        'Hand',
+        'Person',
+        'Selfie',
       ];
-
       for (var l in labels) {
         if (!ignoredLabels.contains(l.label)) newSuggestions.add(l.label);
       }
 
+      // 2. Comprehensive Text Parsing
       for (TextBlock block in recognizedText.blocks) {
-        String text = block.text.trim();
-        if (RegExp(r'^\d+(\.\d{2})?$').hasMatch(text) || text.contains('₵')) {
-          foundPrice = text.replaceAll(RegExp(r'[^0-9.]'), '');
-        } else if (text.length > 3 && text.length < 20) {
-          String cleanText = text.replaceAll(RegExp(r'[^\w\s]'), '');
+        String text = block.text.trim().toLowerCase();
+
+        // --- REGEX FOR MEASUREMENTS (Unit Field) ---
+        // Matches numbers followed by shop standards: g, grams, kg, ml, mililitres, litres, etc.
+        final unitRegex = RegExp(
+          r'(\d+(\.\d+)?)\s*(gram|grams|g|kg|kilogram|kilograms|ml|millilitre|millilitres|l|litre|litres|mm|cm|inches|inch|yard|yards|lb|oz)\b',
+        );
+
+        if (unitRegex.hasMatch(text)) {
+          var match = unitRegex.firstMatch(text);
+          if (match != null) {
+            foundUnit = match.group(0); // This captures "500ml" or "2kg"
+          }
+          continue;
+        }
+
+        // --- REGEX FOR CURRENCY (Price Field) ---
+        // Strictly requires symbols to differentiate from measurements
+        final priceWithCurrencyRegex = RegExp(r'([₵$]|ghs)\s*(\d+(\.\d{2})?)');
+        if (priceWithCurrencyRegex.hasMatch(text)) {
+          var match = priceWithCurrencyRegex.firstMatch(text);
+          if (match != null) {
+            foundPrice = match.group(0)!.replaceAll(RegExp(r'[^0-9.]'), '');
+          }
+          continue;
+        }
+
+        // Name Suggestion if not a price or unit
+        if (text.length > 3 && text.length < 20) {
+          String cleanText = block.text.replaceAll(RegExp(r'[^\w\s]'), '');
           if (cleanText.isNotEmpty) newSuggestions.insert(0, cleanText);
         }
       }
+
       if (mounted) {
         setState(() {
           _aiSuggestions = newSuggestions.take(8).toList();
-          if (foundPrice != null) _priceController.text = foundPrice;
+
+          // Auto-fill the Price Controller
+          if (foundPrice != null) {
+            _priceController.text = foundPrice;
+          }
+
+          // Auto-fill the Unit/Size variable
+          if (foundUnit != null) {
+            _selectedUnit = foundUnit;
+            // Note: This updates the internal state; the Autocomplete widget
+            // will show this value on its next build.
+          }
         });
       }
+
       imageLabeler.close();
       textRecognizer.close();
     } catch (e) {

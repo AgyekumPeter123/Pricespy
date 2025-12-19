@@ -64,6 +64,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   // --- 2. IMAGE PICKING & CROPPING ---
+  // --- 2. IMAGE PICKING & CROPPING ---
   Future<void> _pickAndCropImage(ImageSource source) async {
     final picker = ImagePicker();
     final XFile? pickedFile = await picker.pickImage(
@@ -74,10 +75,6 @@ class _ProfilePageState extends State<ProfilePage> {
     if (pickedFile != null) {
       final croppedFile = await ImageCropper().cropImage(
         sourcePath: pickedFile.path,
-        aspectRatio: const CropAspectRatio(
-          ratioX: 1,
-          ratioY: 1,
-        ), // Square for profiles
         uiSettings: [
           AndroidUiSettings(
             toolbarTitle: 'Adjust Profile Picture',
@@ -85,13 +82,19 @@ class _ProfilePageState extends State<ProfilePage> {
             toolbarWidgetColor: Colors.white,
             initAspectRatio: CropAspectRatioPreset.square,
             lockAspectRatio: true,
+            aspectRatioPresets: [CropAspectRatioPreset.square],
           ),
-          IOSUiSettings(title: 'Adjust Profile Picture'),
+          IOSUiSettings(
+            title: 'Adjust Profile Picture',
+            aspectRatioPresets: [CropAspectRatioPreset.square],
+          ),
         ],
       );
 
       if (croppedFile != null) {
-        _uploadImageToSupabase(File(croppedFile.path));
+        // Start loading before calling the upload
+        setState(() => _isLoading = true);
+        await _uploadImageToSupabase(File(croppedFile.path));
       }
     }
   }
