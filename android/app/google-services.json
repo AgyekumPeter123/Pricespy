@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "464751734266",
+    "project_id": "pricespy-77e52",
+    "storage_bucket": "pricespy-77e52.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:464751734266:android:d66be1f5390623debfc843",
+        "android_client_info": {
+          "package_name": "com.example.proj"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "464751734266-158kl95e5qnuf41b5ofva994rk73ll5j.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.proj",
+            "certificate_hash": "d99524a35e72655a49fe381185b0d1ab10dac502"
+          }
+        },
+        {
+          "client_id": "464751734266-6a0kfeaqd7tv4jbabpegqru6t4fji0gc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAoyvC1BWA_lVOomMNtSEraOIm_ToM6cuA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "464751734266-6a0kfeaqd7tv4jbabpegqru6t4fji0gc.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
