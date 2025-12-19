@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // REQUIRED FOR CLIPBOARD
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' hide Source;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
@@ -15,7 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 // --- YOUR IMPORTS ---
 import '../../services/chat_service.dart';
-import '../../services/chat_status_service.dart'; // REINSTATED
+import '../../services/chat_status_service.dart';
 import '../../encryption_service.dart';
 import '../../MediaPreviewScreen.dart';
 import '../../video_trimmer.dart';
@@ -41,10 +41,10 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-// Re-added WidgetsBindingObserver to detect when user leaves/returns to app
-class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
+// 🟢 REMOVED: WidgetsBindingObserver (Now handled globally by LifeCycleManager)
+class _ChatScreenState extends State<ChatScreen> {
   late ChatService _chatService;
-  late ChatStatusService _statusService; // REINSTATED
+  late ChatStatusService _statusService;
 
   final TextEditingController _textController = TextEditingController();
   final ItemScrollController _scrollController = ItemScrollController();
@@ -78,28 +78,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       receiverId: widget.receiverId,
     );
 
-    // Initialize Status Service and start observing app state
     _statusService = ChatStatusService(currentUserId: myUid);
-    WidgetsBinding.instance.addObserver(this);
 
-    // FIX: Mark as read immediately on entry to clear Chat List badge
+    // 🟢 Keep this: Mark messages as READ for THIS specific chat.
+    // Presence (Online/Offline) is now handled globally in main.dart.
     _statusService.markMessagesAsRead(widget.chatId);
-    _statusService.setUserOnline(true);
 
     _initRecorder();
     _loadWallpaper();
   }
 
-  // Detect app background/foreground to update online status
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _statusService.setUserOnline(true);
-      _statusService.markMessagesAsRead(widget.chatId);
-    } else {
-      _statusService.setUserOnline(false);
-    }
-  }
+  // 🟢 REMOVED: didChangeAppLifecycleState (Now handled globally)
 
   // --- WALLPAPER LOGIC ---
   Future<void> _loadWallpaper() async {
@@ -122,13 +111,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   void _showColorPicker() {
     final List<Color> colors = [
-      const Color(0xFFE5E5E5), // Default
-      const Color(0xFFFFF7D6), // Cream
-      const Color(0xFFD4F1F4), // Light Blue
-      const Color(0xFFE8DFF5), // Light Purple
-      const Color(0xFFFFE4E1), // Rose
-      const Color(0xFFE0F2F1), // Teal
-      const Color(0xFF121212), // Dark
+      const Color(0xFFE5E5E5),
+      const Color(0xFFFFF7D6),
+      const Color(0xFFD4F1F4),
+      const Color(0xFFE8DFF5),
+      const Color(0xFFFFE4E1),
+      const Color(0xFFE0F2F1),
+      const Color(0xFF121212),
     ];
 
     showModalBottomSheet(
@@ -162,8 +151,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         color: colors[index],
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.grey[300]!),
-                        boxShadow: [
-                          const BoxShadow(color: Colors.black12, blurRadius: 4),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black12, blurRadius: 4),
                         ],
                       ),
                       child: _backgroundColor.value == colors[index].value
@@ -180,7 +169,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
-  // --- STANDARD INIT LOGIC ---
   Future<void> _initRecorder() async {
     await Permission.microphone.request();
     await _audioRecorder.openRecorder();
@@ -188,8 +176,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this); // Stop observing app state
-    _statusService.setUserOnline(false);
+    // 🟢 REMOVED: setUserOnline(false) - Handled globally
     _statusService.dispose();
     _textController.dispose();
     _audioRecorder.closeRecorder();
@@ -198,7 +185,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  // --- SCROLL TO MESSAGE LOGIC ---
   void _scrollToMessage(String msgId) {
     int index = _currentDocs.indexWhere((doc) => doc.id == msgId);
     if (index != -1) {
@@ -212,15 +198,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         if (mounted) setState(() => _highlightedMessageId = null);
       });
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Message not found (might be loaded above)"),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Message not found")));
     }
   }
 
-  // --- MENU ACTIONS ---
   void _showMessageOptions(String docId, Map<String, dynamic> data, bool isMe) {
     bool isAlreadyDeleted = data['isDeleted'] == true;
 
@@ -268,9 +251,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           widget.chatId,
                         );
                       } catch (_) {}
-
                       await Clipboard.setData(ClipboardData(text: text));
-
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text("Copied!")),
@@ -319,9 +300,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       context: context,
       builder: (c) => AlertDialog(
         title: const Text("Clear Chat?"),
-        content: const Text(
-          "This will clear all messages for you. They will remain for the other person.",
-        ),
+        content: const Text("This will clear all messages for you."),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c),
@@ -339,7 +318,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
-  // --- ACTIONS ---
   void _toggleSelection(String docId) {
     setState(() {
       if (_selectedIds.contains(docId)) {
@@ -347,6 +325,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         if (_selectedIds.isEmpty) _isSelectionMode = false;
       } else {
         _selectedIds.add(docId);
+        _isSelectionMode = true;
       }
     });
   }
@@ -417,7 +396,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
-  // --- MEDIA PICKING ---
   Future<void> _pickMedia(String type) async {
     final ImagePicker picker = ImagePicker();
     XFile? file;
@@ -470,7 +448,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     setState(() => _replyMessage = null);
   }
 
-  // --- RECORDING ---
   void _startRecording() async {
     Directory temp = await getTemporaryDirectory();
     String path =
@@ -506,7 +483,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
-  // --- BUILD ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -623,7 +599,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 if (!snapshot.hasData)
                   return const Center(child: CircularProgressIndicator());
 
-                // FIX: Continuous mark as read for new messages arriving while screen is open
+                // 🟢 Logic: Every time the stream updates (new message arrives),
+                // mark it as READ instantly if this screen is open.
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _statusService.markMessagesAsRead(widget.chatId);
                 });
@@ -677,15 +654,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       isHighlighted: _highlightedMessageId == doc.id,
                       onPlayAudio: _playAudio,
                       onLongPress: (id) {
-                        if (!_isSelectionMode) {
+                        if (!_isSelectionMode)
                           _showMessageOptions(
                             id,
                             data,
                             data['senderId'] == myUid,
                           );
-                        }
                       },
-                      onTap: (id) => _toggleSelection(id),
+                      onTap: (id) =>
+                          _isSelectionMode ? _toggleSelection(id) : null,
                       onOpenGallery: (url, isVideo) {
                         if (!isVideo) {
                           Navigator.push(
@@ -746,9 +723,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               _textController.clear();
               setState(() => _replyMessage = null);
             },
-            onTyping: (val) {
-              _statusService.setTypingStatus(widget.chatId, val.isNotEmpty);
-            },
+            onTyping: (val) =>
+                _statusService.setTypingStatus(widget.chatId, val.isNotEmpty),
           ),
         ],
       ),

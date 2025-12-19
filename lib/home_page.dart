@@ -24,10 +24,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final User? user = FirebaseAuth.instance.currentUser;
   Position? _myPosition;
-
-  // Settings
-  double _searchRadiusKm = 20.0; // Defaults to 20 until SharedPreferences loads
-
+  double _searchRadiusKm = 20.0;
   String _selectedFilter = "Nearest Me";
   final List<String> _filters = [
     "Nearest Me",
@@ -41,13 +38,15 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _loadSettings(); // Load radius preference first
+    _loadSettings();
     _getCurrentLocation();
 
     _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text.toLowerCase().trim();
-      });
+      if (mounted) {
+        setState(() {
+          _searchQuery = _searchController.text.toLowerCase().trim();
+        });
+      }
     });
   }
 
@@ -57,12 +56,10 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  // --- 1. LOAD USER RADIUS PREFERENCE ---
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
-        // Reads 'search_radius' saved from LocationSettingsPage
         _searchRadiusKm = prefs.getDouble('search_radius') ?? 20.0;
       });
     }
@@ -78,7 +75,6 @@ class _HomePageState extends State<HomePage> {
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-
       if (mounted) {
         setState(() => _myPosition = position);
         _checkSpyAlerts();
@@ -90,7 +86,6 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _checkSpyAlerts() async {
     if (user == null || _myPosition == null) return;
-
     try {
       final watchlistSnap = await FirebaseFirestore.instance
           .collection('users')
@@ -99,7 +94,6 @@ class _HomePageState extends State<HomePage> {
           .get();
 
       if (watchlistSnap.docs.isEmpty) return;
-
       final yesterday = DateTime.now().subtract(const Duration(hours: 24));
 
       for (var alertDoc in watchlistSnap.docs) {
@@ -124,10 +118,7 @@ class _HomePageState extends State<HomePage> {
             (postData['latitude'] ?? 0).toDouble(),
             (postData['longitude'] ?? 0).toDouble(),
           );
-
-          if (dist <= radiusMeters) {
-            matchCount++;
-          }
+          if (dist <= radiusMeters) matchCount++;
         }
 
         if (matchCount > 0 && mounted) {
@@ -177,7 +168,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // --- 2. REFRESH LOGIC ---
   Future<void> _refreshAll() async {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -262,7 +252,6 @@ class _HomePageState extends State<HomePage> {
                           decoration: InputDecoration(
                             icon: const Icon(Icons.search, color: Colors.grey),
                             hintText: "Search cement, rice...",
-                            hintStyle: TextStyle(color: Colors.grey[500]),
                             border: InputBorder.none,
                             suffixIcon: _searchQuery.isNotEmpty
                                 ? IconButton(
@@ -282,7 +271,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
-
           SliverToBoxAdapter(
             child: Column(
               children: [
@@ -344,32 +332,26 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
-
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('posts')
                 .orderBy('timestamp', descending: true)
                 .snapshots(),
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
+              if (snapshot.connectionState == ConnectionState.waiting)
                 return const SliverFillRemaining(
                   child: Center(child: CircularProgressIndicator()),
                 );
-              }
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
                 return const SliverFillRemaining(
                   child: Center(child: Text("No intel yet.")),
                 );
-              }
 
               var docs = snapshot.data!.docs;
-
-              // Remove own posts
               docs = docs
                   .where((d) => (d.data() as Map)['uploader_id'] != user?.uid)
                   .toList();
 
-              // Search Filter
               if (_searchQuery.isNotEmpty) {
                 docs = docs.where((d) {
                   final data = d.data() as Map<String, dynamic>;
@@ -387,28 +369,22 @@ class _HomePageState extends State<HomePage> {
                 }).toList();
               }
 
-              // --- 3. APPLY RADIUS FILTER ---
               if (_myPosition != null) {
                 docs = docs.where((d) {
                   final data = d.data() as Map<String, dynamic>;
                   final double postLat = (data['latitude'] ?? 0).toDouble();
                   final double postLng = (data['longitude'] ?? 0).toDouble();
-
                   if (postLat == 0 && postLng == 0) return false;
-
-                  final double distanceInMeters = Geolocator.distanceBetween(
+                  final double dist = Geolocator.distanceBetween(
                     _myPosition!.latitude,
                     _myPosition!.longitude,
                     postLat,
                     postLng,
                   );
-
-                  // Keep post only if it is within the user's defined radius
-                  return distanceInMeters <= (_searchRadiusKm * 1000);
+                  return dist <= (_searchRadiusKm * 1000);
                 }).toList();
               }
 
-              // Type Filters
               if (_selectedFilter == "Shops Only") {
                 docs = docs
                     .where(
@@ -423,30 +399,27 @@ class _HomePageState extends State<HomePage> {
                     .toList();
               }
 
-              // Sorting
               docs.sort((a, b) {
                 final dataA = a.data() as Map<String, dynamic>;
                 final dataB = b.data() as Map<String, dynamic>;
-                if (_selectedFilter == "Cheapest") {
+                if (_selectedFilter == "Cheapest")
                   return ((dataA['price'] ?? 0) as num).compareTo(
                     (dataB['price'] ?? 0) as num,
                   );
-                } else {
-                  if (_myPosition == null) return 0;
-                  double distA = Geolocator.distanceBetween(
-                    _myPosition!.latitude,
-                    _myPosition!.longitude,
-                    (dataA['latitude'] ?? 0).toDouble(),
-                    (dataA['longitude'] ?? 0).toDouble(),
-                  );
-                  double distB = Geolocator.distanceBetween(
-                    _myPosition!.latitude,
-                    _myPosition!.longitude,
-                    (dataB['latitude'] ?? 0).toDouble(),
-                    (dataB['longitude'] ?? 0).toDouble(),
-                  );
-                  return distA.compareTo(distB);
-                }
+                if (_myPosition == null) return 0;
+                double distA = Geolocator.distanceBetween(
+                  _myPosition!.latitude,
+                  _myPosition!.longitude,
+                  (dataA['latitude'] ?? 0).toDouble(),
+                  (dataA['longitude'] ?? 0).toDouble(),
+                );
+                double distB = Geolocator.distanceBetween(
+                  _myPosition!.latitude,
+                  _myPosition!.longitude,
+                  (dataB['latitude'] ?? 0).toDouble(),
+                  (dataB['longitude'] ?? 0).toDouble(),
+                );
+                return distA.compareTo(distB);
               });
 
               if (docs.isEmpty) {
@@ -478,7 +451,6 @@ class _HomePageState extends State<HomePage> {
                 delegate: SliverChildBuilderDelegate((context, index) {
                   final data = docs[index].data() as Map<String, dynamic>;
                   final docId = docs[index].id;
-
                   return Padding(
                     padding: index == docs.length - 1
                         ? const EdgeInsets.only(bottom: 80)
