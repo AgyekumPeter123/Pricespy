@@ -7,7 +7,7 @@ class DisclaimerPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // Clean background
+      backgroundColor: Colors.white,
       drawer: const SidebarDrawer(),
       appBar: AppBar(
         title: const Text("Safety & Terms"),
@@ -32,25 +32,25 @@ class DisclaimerPage extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: Image.asset(
-                'assets/icon/app_icon.png', // Ensure you saved the logo here
+                'assets/icon/app_icon.png',
                 height: 100,
                 width: 100,
                 errorBuilder: (c, o, s) => Icon(
                   Icons.security_rounded,
                   size: 80,
                   color: Colors.green[800],
-                ), // Fallback if image fails
+                ),
               ),
             ),
             const SizedBox(height: 20),
 
             const Text(
-              "Important Disclaimer",
+              "Safety First",
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             Text(
-              "Your safety is our priority. Please read carefully.",
+              "PriceSpy is a community tool. Your safety depends on your vigilance.",
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[600], fontSize: 16),
             ),
@@ -58,35 +58,43 @@ class DisclaimerPage extends StatelessWidget {
 
             // --- 2. SAFETY SECTIONS ---
             _buildSafetySection(
-              title: "Location Tracking",
+              title: "Smart Radar Privacy",
               content:
-                  "Our app uses GPS to show you items nearby. While this is convenient, always meet strangers in safe, public places like police stations or busy malls.",
-              icon: Icons.my_location,
+                  "Our 12-point GPS scan shows you items within your chosen radius. We do not share your exact coordinates with other users.",
+              icon: Icons.radar, // Aligned with your app features
               color: Colors.blue,
             ),
 
             _buildSafetySection(
-              title: "AI & Voice Data",
+              title: "AI Vision Data",
               content:
-                  "We use AI to scan product images and convert your voice to text. This data is processed securely to help list items faster. Do not record sensitive personal info.",
-              icon: Icons.smart_toy,
+                  "AI is used to read labels and price tags to speed up listing. This data is processed securely and is never shared with third parties.",
+              icon: Icons.center_focus_strong,
               color: Colors.purple,
             ),
 
             _buildSafetySection(
-              title: "Live Camera Only",
+              title: "Verified by Camera",
               content:
-                  "To prevent scams, uploads are restricted to live camera photos. This ensures you see exactly what the item looks like right now.",
+                  "To prevent scams, users are encouraged to use live camera photos. Always look for listings with clear, recent images.",
               icon: Icons.camera_alt,
               color: Colors.orange,
             ),
 
             _buildSafetySection(
-              title: "Financial Safety",
+              title: "In-App Safety",
               content:
-                  "Never send money before seeing the item. Do not share bank OTPs or passwords. We provide chats for communication; use them wisely.",
+                  "Use our secure chat for all negotiations. Never share personal OTPs, passwords, or pay for items you haven't seen in person.",
               icon: Icons.lock,
               color: Colors.red,
+            ),
+
+            _buildSafetySection(
+              title: "Community Watch",
+              content:
+                  "If you spot a scam or fake price, report it immediately. Our admin team investigates every report to keep the community safe.",
+              icon: Icons.gavel_rounded, // Matches your admin features
+              color: Colors.teal,
             ),
 
             const SizedBox(height: 30),
@@ -107,12 +115,12 @@ class DisclaimerPage extends StatelessWidget {
                     size: 30,
                   ),
                   const SizedBox(width: 15),
-                  Expanded(
+                  const Expanded(
                     child: Text(
                       "If a deal sounds too good to be true, it probably is. Stay vigilant!",
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.red[900],
+                        color: Color(0xFFB71C1C),
                         height: 1.4,
                       ),
                     ),
@@ -127,21 +135,12 @@ class DisclaimerPage extends StatelessWidget {
             const Divider(),
             const SizedBox(height: 20),
             Text(
-              "FIND . COMPARE . TRADE", // 3 words separated by dot (Visual style)
+              "FIND . COMPARE . SAVE",
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 4.0,
                 color: Colors.green[900],
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              "Enjoy the App!",
-              style: TextStyle(
-                fontSize: 16,
-                fontStyle: FontStyle.italic,
-                color: Colors.grey,
               ),
             ),
             const SizedBox(height: 40),
