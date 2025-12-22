@@ -1,4 +1,4 @@
-import 'dart:async'; // Required for the "Live" timer
+import 'dart:async';
 import 'dart:math' show asin, atan2, cos, pi, sin;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'sidebar_drawer.dart';
+import 'SpyResultsPage.dart'; // REQUIRED IMPORT
 
 class WatchlistPage extends StatefulWidget {
   const WatchlistPage({super.key});
@@ -17,98 +18,109 @@ class WatchlistPage extends StatefulWidget {
 class _WatchlistPageState extends State<WatchlistPage> {
   final User? user = FirebaseAuth.instance.currentUser;
   late String _homeTown = "your area";
+  int _scanSessionId = 0;
 
-  // --- 1. High-Precision Dynamic Context Fetcher ---
-  Future<String> _getDynamicRadiusContext(double radiusKm) async {
+  // Track reach for graph
+  Map<String, double> _sectorReach = {
+    'North': 0,
+    'East': 0,
+    'South': 0,
+    'West': 0,
+  };
+
+  Future<String> _runManualRadar(
+    double radiusKm,
+    int mySessionId,
+    Function(Map<String, double>) onUpdateGraph,
+  ) async {
     try {
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      // 🔹 12 points for a thorough radar sweep (used to validate specific sectors)
-      final List<double> bearings = [
-        0.0,
-        30.0,
-        60.0,
-        90.0,
-        120.0,
-        150.0,
-        180.0,
-        210.0,
-        240.0,
-        270.0,
-        300.0,
-        330.0,
-      ];
-
+      // High Precision
+      List<double> bearings = List.generate(36, (i) => i * 10.0);
       Map<String, String> directionalFrontier = {};
-
-      // Walk outward in steps to find the "last known town"
-      List<double> steps = [
-        5.0,
-        10.0,
-        15.0,
-        20.0,
-        radiusKm,
-      ].where((s) => s <= radiusKm).toList();
-      if (!steps.contains(radiusKm)) steps.add(radiusKm);
-
-      // Map primary directions to their respective points in the 'bearings' list
-      Map<String, List<double>> cardinalSectors = {
-        'North': bearings.where((b) => b >= 330 || b <= 30).toList(),
-        'East': bearings.where((b) => b >= 60 && b <= 120).toList(),
-        'South': bearings.where((b) => b >= 150 && b <= 210).toList(),
-        'West': bearings.where((b) => b >= 240 && b <= 300).toList(),
+      Map<String, double> tempReach = {
+        'North': 0,
+        'East': 0,
+        'South': 0,
+        'West': 0,
       };
 
-      for (var sector in cardinalSectors.entries) {
-        String? lastFoundTown;
-        double lastFoundDistance = 0.0;
+      // 2km Steps
+      List<double> steps = [];
+      for (double i = 2.0; i <= radiusKm; i += 2.0) steps.add(i);
+      if (steps.isEmpty || steps.last != radiusKm) steps.add(radiusKm);
 
-        for (double b in sector.value) {
+      Map<String, List<double>> sectors = {
+        'North': bearings.where((b) => b >= 315 || b <= 45).toList(),
+        'East': bearings.where((b) => b > 45 && b <= 135).toList(),
+        'South': bearings.where((b) => b > 135 && b <= 225).toList(),
+        'West': bearings.where((b) => b > 225 && b < 315).toList(),
+      };
+
+      for (var s in sectors.entries) {
+        String? lastTown;
+        double maxDist = 0;
+        for (double b in s.value) {
+          if (mySessionId != _scanSessionId) return "Cancelled";
+
           for (double d in steps) {
-            String? town = await _getTownAtRadius(position, d, b);
-            if (town != null && town.isNotEmpty) {
-              lastFoundTown = town;
-              lastFoundDistance = d;
+            // Fix 3: Add delay to prevent UI freeze (same logic applied here for consistency)
+            await Future.delayed(const Duration(milliseconds: 5));
+            String? t = await _getTown(position, d, b);
+            if (t != null && t.isNotEmpty && t != _homeTown) {
+              lastTown = t;
+              if (d > maxDist) maxDist = d;
             }
           }
         }
 
-        if (lastFoundTown != null) {
-          double beyond = radiusKm - lastFoundDistance;
-          directionalFrontier[sector.key] = beyond > 3.0
-              ? "$lastFoundTown (+${beyond.toInt()}km beyond)"
-              : lastFoundTown;
+        tempReach[s.key] = maxDist;
+
+        if (lastTown != null) {
+          double beyond = radiusKm - maxDist;
+          directionalFrontier[s.key] = beyond > 2.0
+              ? "$lastTown (+${beyond.toInt()}km)"
+              : lastTown;
         } else {
-          directionalFrontier[sector.key] = _homeTown;
+          directionalFrontier[s.key] = "Rural";
         }
       }
 
-      List<String> summary = [];
-      directionalFrontier.forEach((dir, info) => summary.add("$dir ($info)"));
-      return "At ${radiusKm.toInt()}km, coverage reaches ${summary.join(', ')}";
+      if (mySessionId != _scanSessionId) return "Cancelled";
+
+      // Update Graph Data
+      onUpdateGraph(tempReach);
+
+      List<String> sum = [];
+      directionalFrontier.forEach((k, v) {
+        if (v != "Rural") sum.add("$k: $v");
+      });
+
+      return sum.isEmpty
+          ? "No major towns found nearby."
+          : "Reach: ${sum.join(', ')}";
     } catch (e) {
-      return "Adjust radius to see coverage.";
+      return "Unable to scan area.";
     }
   }
 
-  Future<String?> _getTownAtRadius(
-    Position start,
-    double dist,
-    double brngDegrees,
-  ) async {
+  Future<String?> _getTown(Position start, double dist, double brng) async {
     try {
       const double R = 6371.0;
-      double brng = brngDegrees * (pi / 180);
+      double radBrng = brng * (pi / 180);
       double dR = dist / R;
       double lat1 = start.latitude * (pi / 180);
       double lon1 = start.longitude * (pi / 180);
-      double lat2 = asin(sin(lat1) * cos(dR) + cos(lat1) * sin(dR) * cos(brng));
+      double lat2 = asin(
+        sin(lat1) * cos(dR) + cos(lat1) * sin(dR) * cos(radBrng),
+      );
       double lon2 =
           lon1 +
           atan2(
-            sin(brng) * sin(dR) * cos(lat1),
+            sin(radBrng) * sin(dR) * cos(lat1),
             cos(dR) - sin(lat1) * sin(lat2),
           );
       List<Placemark> marks = await placemarkFromCoordinates(
@@ -117,24 +129,103 @@ class _WatchlistPageState extends State<WatchlistPage> {
       );
       if (marks.isNotEmpty) {
         Placemark p = marks[0];
-        String? name = p.locality ?? p.subLocality ?? p.name;
-        if (name != null &&
-            name.length > 2 &&
-            !name.contains('+') &&
-            name.toLowerCase() != "unnamed road")
-          return name;
+        String? n = p.locality ?? p.subLocality ?? p.name;
+        if (n != null &&
+            n.length > 2 &&
+            !n.contains('+') &&
+            n.toLowerCase() != "unnamed road")
+          return n;
       }
     } catch (_) {}
     return null;
+  }
+
+  // Fix 5: Manual Trigger Logic
+  Future<void> _triggerManualSpy(Map<String, dynamic> spyData) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Scanning for '${spyData['keyword']}'..."),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+
+    try {
+      Position myPos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+      );
+      final String searchKey = spyData['search_key'] ?? '';
+      final double maxPrice = (spyData['max_price'] ?? 999999).toDouble();
+      final double radiusMeters = (spyData['radius_km'] ?? 5).toDouble() * 1000;
+
+      // Fix 5: Removed date limit (search all time)
+      final matches = await FirebaseFirestore.instance
+          .collection('posts')
+          .where('search_key', isEqualTo: searchKey)
+          .where('price', isLessThanOrEqualTo: maxPrice)
+          .get();
+
+      int matchCount = 0;
+      for (var post in matches.docs) {
+        final postData = post.data();
+        double dist = Geolocator.distanceBetween(
+          myPos.latitude,
+          myPos.longitude,
+          (postData['latitude'] ?? 0).toDouble(),
+          (postData['longitude'] ?? 0).toDouble(),
+        );
+        if (dist <= radiusMeters) matchCount++;
+      }
+
+      if (!mounted) return;
+
+      if (matchCount > 0) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Spy found $matchCount item(s)!"),
+            backgroundColor: Colors.green[800],
+            action: SnackBarAction(
+              label: "VIEW",
+              textColor: Colors.yellow,
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SpyResultsPage(
+                      keyword: spyData['keyword'],
+                      searchKey: searchKey,
+                      maxPrice: maxPrice,
+                      radiusKm: radiusMeters / 1000,
+                      userPosition: myPos,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("No items found in this radius yet.")),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Scan failed: $e")));
+    }
   }
 
   void _showAddAlertSheet() {
     final keywordController = TextEditingController();
     final priceController = TextEditingController();
     double radius = 20.0;
-    String contextText = "Adjust slider to check coverage...";
+    String contextText = "Tap 'Check Coverage' to scan.";
     bool isFetching = false;
-    Timer? debounce;
+    bool isSaving = false; // Fix 4: Saving state
+
+    // Reset graph for new sheet
+    _sectorReach = {'North': 0, 'East': 0, 'South': 0, 'West': 0};
 
     Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low).then((
       pos,
@@ -145,10 +236,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
       );
       if (marks.isNotEmpty) {
         _homeTown =
-            marks.first.locality ??
-            marks.first.subLocality ??
-            marks.first.administrativeArea ??
-            "your area";
+            marks.first.locality ?? marks.first.subLocality ?? "your area";
       }
     });
 
@@ -161,193 +249,273 @@ class _WatchlistPageState extends State<WatchlistPage> {
       ),
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
-          void onRadiusChanged(double val) {
-            setModalState(() => radius = val);
-            if (debounce?.isActive ?? false) debounce!.cancel();
-            debounce = Timer(const Duration(milliseconds: 1000), () async {
-              setModalState(() => isFetching = true);
-              String result = await _getDynamicRadiusContext(val);
-              if (context.mounted) {
-                setModalState(() {
-                  contextText = result;
-                  isFetching = false;
-                });
-              }
+          Future<void> onCheckPressed() async {
+            int mySession = ++_scanSessionId;
+            setModalState(() {
+              isFetching = true;
+              contextText = "Scanning area...";
+              _sectorReach = {'North': 0, 'East': 0, 'South': 0, 'West': 0};
             });
+
+            String result = await _runManualRadar(radius, mySession, (
+              newReach,
+            ) {
+              _sectorReach = newReach;
+            });
+
+            if (context.mounted && mySession == _scanSessionId) {
+              setModalState(() {
+                contextText = result;
+                isFetching = false;
+              });
+            }
           }
 
-          if (contextText == "Adjust slider to check coverage..." &&
-              !isFetching) {
-            onRadiusChanged(radius);
-          }
-
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-              left: 24,
-              right: 24,
-              top: 24,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const Text(
-                  "New Spy Alert",
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  "Get notified when items match your criteria.",
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-                const SizedBox(height: 25),
-                TextField(
-                  controller: keywordController,
-                  decoration: InputDecoration(
-                    labelText: "Keyword",
-                    hintText: "e.g. Cement, Rice, TV",
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    prefixIcon: const Icon(Icons.search),
-                  ),
-                ),
-                const SizedBox(height: 15),
-                TextField(
-                  controller: priceController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: "Max Price (₵)",
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    prefixIcon: const Icon(Icons.payments_outlined),
-                  ),
-                ),
-                const SizedBox(height: 25),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                24,
+                24,
+                24,
+                MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      "Alert Radius",
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
                     ),
-                    Text(
-                      "${radius.round()} km",
+                    const SizedBox(height: 20),
+                    const Text(
+                      "New Spy Alert",
                       style: TextStyle(
-                        color: Colors.green[800],
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 25),
+                    TextField(
+                      controller: keywordController,
+                      decoration: InputDecoration(
+                        labelText: "Keyword",
+                        hintText: "e.g. Cement, Rice",
+                        filled: true,
+                        fillColor: Colors.grey[50],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        prefixIcon: const Icon(Icons.search),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: priceController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: "Max Price (₵)",
+                        filled: true,
+                        fillColor: Colors.grey[50],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        prefixIcon: const Icon(Icons.payments_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 25),
+
+                    // SLIDER
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "Alert Radius",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          "${radius.round()} km",
+                          style: TextStyle(
+                            color: Colors.green[800],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Slider(
+                      value: radius,
+                      min: 1,
+                      max: 100,
+                      divisions: 99,
+                      activeColor: Colors.green[800],
+                      onChanged: (val) => setModalState(() {
+                        _scanSessionId++;
+                        radius = val;
+                        isFetching = false;
+                        contextText = "Radius changed. Tap to scan.";
+                        _sectorReach = {
+                          'North': 0,
+                          'East': 0,
+                          'South': 0,
+                          'West': 0,
+                        };
+                      }),
+                    ),
+
+                    // SCAN BUTTON
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: isFetching ? null : onCheckPressed,
+                        icon: isFetching
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.radar, size: 18),
+                        label: Text(
+                          isFetching ? "Scanning..." : "Check Coverage",
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.blue,
+                        ),
+                      ),
+                    ),
+
+                    // GRAPH VISUALIZATION
+                    Center(
+                      child: SizedBox(
+                        height: 150,
+                        width: 150,
+                        child: CustomPaint(
+                          painter: _MiniRadarPainter(
+                            data: _sectorReach,
+                            maxRadius: radius,
+                          ),
+                          child: const Center(
+                            child: Icon(
+                              Icons.location_on,
+                              size: 16,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        contextText,
+                        style: TextStyle(
+                          color: Colors.blue[900],
+                          fontSize: 13,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 30),
+                    // Fix 4: Activate Button with Feedback
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green[800],
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: isSaving
+                            ? null
+                            : () async {
+                                if (keywordController.text.isNotEmpty &&
+                                    user != null) {
+                                  setModalState(() => isSaving = true);
+
+                                  try {
+                                    Position position =
+                                        await Geolocator.getCurrentPosition();
+                                    await FirebaseFirestore.instance
+                                        .collection('users')
+                                        .doc(user!.uid)
+                                        .collection('watchlist')
+                                        .add({
+                                          'keyword': keywordController.text
+                                              .trim(),
+                                          'search_key': keywordController.text
+                                              .trim()
+                                              .toLowerCase(),
+                                          'max_price':
+                                              double.tryParse(
+                                                priceController.text,
+                                              ) ??
+                                              999999,
+                                          'radius_km': radius,
+                                          'latitude': position.latitude,
+                                          'longitude': position.longitude,
+                                          'created_at':
+                                              FieldValue.serverTimestamp(),
+                                        });
+
+                                    if (mounted) {
+                                      Navigator.pop(context);
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            "Spy Activated! You can now scan for items.",
+                                          ),
+                                          backgroundColor: Colors.green,
+                                        ),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    setModalState(() => isSaving = false);
+                                  }
+                                }
+                              },
+                        child: isSaving
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                "ACTIVATE SPY",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                       ),
                     ),
                   ],
                 ),
-                Slider(
-                  value: radius,
-                  min: 1,
-                  max: 100,
-                  divisions: 99,
-                  activeColor: Colors.green[800],
-                  onChanged: (val) => onRadiusChanged(val),
-                ),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.blue.shade100),
-                  ),
-                  child: Row(
-                    children: [
-                      isFetching
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(
-                              Icons.radar,
-                              size: 20,
-                              color: Colors.blue,
-                            ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          contextText,
-                          style: TextStyle(
-                            color: Colors.blue[900],
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 30),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green[800],
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    onPressed: () async {
-                      if (keywordController.text.isNotEmpty && user != null) {
-                        Position position =
-                            await Geolocator.getCurrentPosition();
-                        await FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(user!.uid)
-                            .collection('watchlist')
-                            .add({
-                              'keyword': keywordController.text.trim(),
-                              'search_key': keywordController.text
-                                  .trim()
-                                  .toLowerCase(),
-                              'max_price':
-                                  double.tryParse(priceController.text) ??
-                                  999999,
-                              'radius_km': radius,
-                              'latitude': position.latitude,
-                              'longitude': position.longitude,
-                              'created_at': FieldValue.serverTimestamp(),
-                            });
-                        if (mounted) Navigator.pop(context);
-                      }
-                    },
-                    child: const Text(
-                      "ACTIVATE SPY",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           );
         },
@@ -366,7 +534,6 @@ class _WatchlistPageState extends State<WatchlistPage> {
         title: const Text("My Spy Alerts"),
         backgroundColor: Colors.green[800],
         foregroundColor: Colors.white,
-        elevation: 0,
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
@@ -389,39 +556,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
             .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.green[50],
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.radar,
-                      size: 60,
-                      color: Colors.green[200],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    "No active spies.",
-                    style: TextStyle(
-                      color: Colors.grey[800],
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    "Add an alert to track prices nearby.",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-            );
+            return const Center(child: Text("No active spies."));
           }
           return ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -433,7 +568,6 @@ class _WatchlistPageState extends State<WatchlistPage> {
               return Card(
                 elevation: 2,
                 color: Colors.white,
-                surfaceTintColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -461,56 +595,36 @@ class _WatchlistPageState extends State<WatchlistPage> {
                       fontSize: 16,
                     ),
                   ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Wrap(
-                      spacing: 12,
-                      runSpacing: 4,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.monetization_on,
-                              size: 14,
-                              color: Colors.green[700],
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              "Max: ₵${data['max_price']}",
-                              style: TextStyle(
-                                color: Colors.green[800],
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.location_on,
-                              size: 14,
-                              color: Colors.grey,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              "${data['radius_km']} km radius",
-                              style: const TextStyle(color: Colors.grey),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                  subtitle: Text(
+                    "Max: ₵${data['max_price']} • ${data['radius_km']} km radius",
+                    style: const TextStyle(color: Colors.grey),
                   ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    onPressed: () => FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(user!.uid)
-                        .collection('watchlist')
-                        .doc(docId)
-                        .delete(),
+                  // Fix 5: Icons for Delete and Search
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.youtube_searched_for,
+                          color: Colors.blue,
+                          size: 28,
+                        ),
+                        tooltip: "Scan Now",
+                        onPressed: () => _triggerManualSpy(data),
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.red,
+                        ),
+                        onPressed: () => FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(user!.uid)
+                            .collection('watchlist')
+                            .doc(docId)
+                            .delete(),
+                      ),
+                    ],
                   ),
                 ),
               );
@@ -520,4 +634,50 @@ class _WatchlistPageState extends State<WatchlistPage> {
       ),
     );
   }
+}
+
+class _MiniRadarPainter extends CustomPainter {
+  final Map<String, double> data;
+  final double maxRadius;
+  _MiniRadarPainter({required this.data, required this.maxRadius});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    // Updated paints to match Location Settings style
+    final linePaint = Paint()
+      ..color = Colors.grey.withOpacity(0.3)
+      ..style = PaintingStyle.stroke;
+    final fillPaint = Paint()
+      ..color = Colors.green.withOpacity(0.2)
+      ..style = PaintingStyle.fill;
+    final borderPaint = Paint()
+      ..color = Colors.green[700]!
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+
+    canvas.drawCircle(center, radius, linePaint);
+    canvas.drawCircle(center, radius * 0.5, linePaint);
+
+    final path = Path();
+    path.moveTo(center.dx, center.dy - _norm(data['North']!, radius));
+    path.lineTo(center.dx + _norm(data['East']!, radius), center.dy);
+    path.lineTo(center.dx, center.dy + _norm(data['South']!, radius));
+    path.lineTo(center.dx - _norm(data['West']!, radius), center.dy);
+    path.close();
+
+    canvas.drawPath(path, fillPaint);
+    canvas.drawPath(path, borderPaint);
+  }
+
+  double _norm(double val, double viewRadius) {
+    if (val <= 0) return 0;
+    double ratio = val / maxRadius;
+    if (ratio > 1.0) ratio = 1.0;
+    return ratio * viewRadius;
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

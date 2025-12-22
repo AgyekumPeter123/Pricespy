@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'product_details_page.dart';
-import 'sidebar_drawer.dart'; // <--- IMPORT THIS
+import 'sidebar_drawer.dart';
 
 class InboxPage extends StatefulWidget {
   const InboxPage({super.key});
@@ -95,13 +95,11 @@ class _InboxPageState extends State<InboxPage> {
     }
 
     return Scaffold(
-      // 1. ADD DRAWER
       drawer: const SidebarDrawer(),
       appBar: AppBar(
-        title: const Text("Replies"),
+        title: const Text("Inbox"),
         backgroundColor: Colors.green[800],
         foregroundColor: Colors.white,
-        // 2. FORCE HAMBURGER
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
@@ -135,7 +133,28 @@ class _InboxPageState extends State<InboxPage> {
             );
           }
 
-          final notifications = snapshot.data!.docs;
+          // FILTER: Show only non-reply notifications in Inbox
+          final notifications = snapshot.data!.docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return data['type'] != 'reply';
+          }).toList();
+
+          if (notifications.isEmpty) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.mark_email_read, size: 60, color: Colors.grey),
+                  SizedBox(height: 10),
+                  Text("Inbox is empty."),
+                  Text(
+                    "(Check 'Comments' for post replies)",
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            );
+          }
 
           return ListView.separated(
             itemCount: notifications.length,

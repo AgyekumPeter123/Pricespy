@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:geolocator/geolocator.dart';
 import 'add_price_sheet.dart';
 import 'comment_sheet.dart';
 import 'price_trend_chart.dart';
@@ -11,12 +12,14 @@ class ProductDetailsPage extends StatefulWidget {
   final Map<String, dynamic> data;
   final String documentId;
   final bool autoOpenComments;
+  final Position? userPosition;
 
   const ProductDetailsPage({
     super.key,
     required this.data,
     required this.documentId,
     this.autoOpenComments = false,
+    this.userPosition,
   });
 
   @override
@@ -24,9 +27,23 @@ class ProductDetailsPage extends StatefulWidget {
 }
 
 class _ProductDetailsPageState extends State<ProductDetailsPage> {
+  // Fix 1: Store uploaderId locally so we can update it if missing
+  late String _uploaderId;
+  String? _uploaderEmail; // Fix 2: To store fetched email for admin
+  bool _isAdmin = false;
+  final String _adminEmail = "agyekumpeter123@gmail.com"; // Hardcoded Admin Check
+
   @override
   void initState() {
     super.initState();
+    _uploaderId = widget.data['uploader_id'] ?? '';
+    _checkAdminAndFetchDetails();
+
+    // Fix 1: If uploader_id is missing (common in Saved Posts), fetch it.
+    if (_uploaderId.isEmpty) {
+      _fetchMissingDetails();
+    }
+
     if (widget.autoOpenComments) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _openComments();
@@ -34,19 +51,77 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     }
   }
 
+  void _checkAdminAndFetchDetails() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && user.email == _adminEmail) {
+      setState(() {
+        _isAdmin = true;
+      });
+      // Fetch uploader email for Admin view
+      if (_uploaderId.isNotEmpty) {
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(_uploaderId)
+            .get()
+            .then((snap) {
+          if (snap.exists) {
+            setState(() {
+              _uploaderEmail = snap.data()?['email'];
+            });
+          }
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchMissingDetails() async {
+    try {
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('posts')
+          .doc(widget.documentId)
+          .get();
+      if (doc.exists) {
+        final freshData = doc.data() as Map<String, dynamic>;
+        setState(() {
+          _uploaderId = freshData['uploader_id'] ?? '';
+          // If admin, fetch email now that we have ID
+          if (_isAdmin && _uploaderId.isNotEmpty) {
+             FirebaseFirestore.instance
+            .collection('users')
+            .doc(_uploaderId)
+            .get()
+            .then((snap) {
+              if(snap.exists) setState(() => _uploaderEmail = snap.data()?['email']);
+            });
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching missing details: $e");
+    }
+  }
+
   void _openComments() {
+    // Fix 1: Use the potentially updated _uploaderId
+    if (_uploaderId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Loading post details... try again.")),
+      );
+      return;
+    }
+    
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => CommentSheet(
         postId: widget.documentId,
-        postOwnerId: widget.data['uploader_id'],
+        postOwnerId: _uploaderId,
       ),
     );
   }
 
-  // --- REPORT LOGIC (UPDATED FOR ADMIN DASHBOARD) ---
+  // --- REPORT LOGIC ---
   Future<void> _reportProduct() async {
     final User? user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -77,16 +152,14 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             onPressed: () async {
               Navigator.pop(context); // Close dialog
 
-              // 1. Save Report with ALL fields required by Admin Dashboard
               await FirebaseFirestore.instance.collection('reports').add({
                 'postId': widget.documentId,
                 'productName': widget.data['product_name'] ?? 'Unknown',
-
-                // CRITICAL: Admin needs these to open chats
                 'reporterId': user.uid,
                 'reporterName': user.displayName ?? 'Anonymous',
-                'uploaderId': widget.data['uploader_id'],
-
+                'uploaderId': _uploaderId, // Use local var
+                // Fix 2: Save uploader email in report if possible
+                'uploaderEmail': _uploaderEmail, 
                 'reason': r,
                 'timestamp': FieldValue.serverTimestamp(),
                 'status': 'pending',
@@ -168,7 +241,8 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   @override
   Widget build(BuildContext context) {
     final User? currentUser = FirebaseAuth.instance.currentUser;
-    final bool isOwner = currentUser?.uid == widget.data['uploader_id'];
+    // Fix 1: Use local _uploaderId
+    final bool isOwner = currentUser?.uid == _uploaderId; 
 
     String locationName = widget.data['location_name'] ?? 'Unknown Location';
     String landmark = widget.data['landmark'] ?? '';
@@ -191,7 +265,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
-          // OWNER ACTIONS
           if (isOwner) ...[
             IconButton(
               icon: const Icon(Icons.edit, color: Colors.blue),
@@ -201,9 +274,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
               icon: const Icon(Icons.delete, color: Colors.red),
               onPressed: _deleteProduct,
             ),
-          ]
-          // VIEWER ACTIONS
-          else ...[
+          ] else ...[
             IconButton(
               icon: const Icon(Icons.flag_outlined, color: Colors.grey),
               tooltip: "Report Item",
@@ -299,6 +370,33 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       ),
                     ],
                   ),
+                  
+                  // Fix 2: Admin Insight Panel
+                  if (_isAdmin && _uploaderEmail != null)
+                    Container(
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.red[50],
+                        border: Border.all(color: Colors.red),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.admin_panel_settings, color: Colors.red),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text("ADMIN INSIGHT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red)),
+                                Text("Uploader Email: $_uploaderEmail", style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          )
+                        ],
+                      ),
+                    ),
 
                   if (isShop && shopName.isNotEmpty) ...[
                     const SizedBox(height: 10),
@@ -337,6 +435,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                   // PRICE TREND CHART
                   PriceTrendChart(
                     productName: widget.data['product_name'] ?? '',
+                    userPosition: widget.userPosition, 
                   ),
 
                   const Divider(),

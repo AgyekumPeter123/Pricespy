@@ -13,7 +13,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// --- YOUR IMPORTS ---
 import '../../services/chat_service.dart';
 import '../../services/chat_status_service.dart';
 import '../../encryption_service.dart';
@@ -41,7 +40,6 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-// 🟢 REMOVED: WidgetsBindingObserver (Now handled globally by LifeCycleManager)
 class _ChatScreenState extends State<ChatScreen> {
   late ChatService _chatService;
   late ChatStatusService _statusService;
@@ -65,7 +63,6 @@ class _ChatScreenState extends State<ChatScreen> {
   Set<String> _selectedIds = {};
   List<QueryDocumentSnapshot> _currentDocs = [];
 
-  // WALLPAPER STATE
   Color _backgroundColor = const Color(0xFFE5E5E5);
   String? _highlightedMessageId;
 
@@ -80,15 +77,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _statusService = ChatStatusService(currentUserId: myUid);
 
-    // 🟢 Keep this: Mark messages as READ for THIS specific chat.
-    // Presence (Online/Offline) is now handled globally in main.dart.
-    _statusService.markMessagesAsRead(widget.chatId);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _statusService.markMessagesAsRead(widget.chatId);
+    });
 
     _initRecorder();
     _loadWallpaper();
   }
-
-  // 🟢 REMOVED: didChangeAppLifecycleState (Now handled globally)
 
   // --- WALLPAPER LOGIC ---
   Future<void> _loadWallpaper() async {
@@ -176,7 +171,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
-    // 🟢 REMOVED: setUserOnline(false) - Handled globally
     _statusService.dispose();
     _textController.dispose();
     _audioRecorder.closeRecorder();
@@ -536,18 +530,26 @@ class _ChatScreenState extends State<ChatScreen> {
                         child: photo == null ? const Icon(Icons.person) : null,
                       ),
                       const SizedBox(width: 10),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(name, style: const TextStyle(fontSize: 16)),
-                          Text(
-                            isOnline ? "Online" : "Offline",
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.white70,
+                      // 🟢 FIX: Wrap Column in Expanded to prevent pixel overflow
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: const TextStyle(fontSize: 16),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
-                          ),
-                        ],
+                            Text(
+                              isOnline ? "Online" : "Offline",
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   );
@@ -599,8 +601,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 if (!snapshot.hasData)
                   return const Center(child: CircularProgressIndicator());
 
-                // 🟢 Logic: Every time the stream updates (new message arrives),
-                // mark it as READ instantly if this screen is open.
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _statusService.markMessagesAsRead(widget.chatId);
                 });

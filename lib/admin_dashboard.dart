@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart'; // NOW USED: For displaying restriction dates
+import 'package:intl/intl.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 
@@ -9,6 +9,7 @@ import 'package:mailer/smtp_server.dart';
 import 'product_details_page.dart';
 import 'sidebar_drawer.dart';
 import 'screens/chat/chat_screen.dart';
+import 'encryption_service.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -93,24 +94,180 @@ class _AdminDashboardState extends State<AdminDashboard>
           .collection('reports')
           .doc(reportId)
           .update({'status': 'resolved'});
-      if (uploaderEmail != null) _sendEmailDirectly(uploaderEmail, productName);
+
+      if (uploaderEmail != null) {
+        _sendEmailDirectly(uploaderEmail, productName);
+      }
       _showSnackBar("Post deleted forever. User notified via email.");
     } catch (e) {
       _showSnackBar("Failed to delete post: $e", isError: true);
     }
   }
 
-  // --- WARNING CHAT ---
-  Future<void> _openWarningChat(String userId, {String? contextInfo}) async {
+  // --- WARNING COMPOSE DIALOG ---
+  void _showWarningComposeDialog(String userId, {String? contextInfo}) {
+    final TextEditingController messageController = TextEditingController();
+    String severity = "Warning";
+
+    if (contextInfo != null) {
+      messageController.text = "Regarding your item '$contextInfo': ";
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange),
+              SizedBox(width: 10),
+              Text("Issue Warning"),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Severity Level",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: severity,
+                      isExpanded: true,
+                      items: [
+                        DropdownMenuItem(
+                          value: "Notice",
+                          child: Row(
+                            children: const [
+                              Icon(Icons.info, color: Colors.blue, size: 18),
+                              SizedBox(width: 8),
+                              Text("Friendly Notice"),
+                            ],
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: "Warning",
+                          child: Row(
+                            children: const [
+                              Icon(
+                                Icons.warning,
+                                color: Colors.orange,
+                                size: 18,
+                              ),
+                              SizedBox(width: 8),
+                              Text("Official Warning"),
+                            ],
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: "Critical",
+                          child: Row(
+                            children: const [
+                              Icon(Icons.report, color: Colors.red, size: 18),
+                              SizedBox(width: 8),
+                              Text("Final / Critical"),
+                            ],
+                          ),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => severity = val);
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 15),
+                const Text(
+                  "Message to User",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                TextField(
+                  controller: messageController,
+                  maxLines: 4,
+                  scrollPhysics: const BouncingScrollPhysics(),
+                  decoration: InputDecoration(
+                    hintText: "Enter the reason for this warning...",
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("CANCEL", style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.send, size: 16),
+              label: const Text("SEND & OPEN CHAT"),
+              onPressed: () {
+                if (messageController.text.trim().isEmpty) {
+                  _showSnackBar("Please enter a message", isError: true);
+                  return;
+                }
+                Navigator.pop(context);
+
+                String icon = "⚠️";
+                if (severity == "Notice") icon = "ℹ️";
+                if (severity == "Critical") icon = "⛔";
+
+                String finalMsg =
+                    "$icon ADMIN ${severity.toUpperCase()}: ${messageController.text.trim()}";
+
+                _sendWarningAndOpenChat(userId, finalMsg);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- EXECUTE WARNING CHAT ---
+  Future<void> _sendWarningAndOpenChat(
+    String userId,
+    String messageText,
+  ) async {
     try {
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
           .get();
+
       if (!doc.exists) {
         _showSnackBar("User not found.", isError: true);
         return;
       }
+
       final data = doc.data() as Map<String, dynamic>;
       final name = data['displayName'] ?? "User";
       final photo = data['photoUrl'];
@@ -120,17 +277,39 @@ class _AdminDashboardState extends State<AdminDashboard>
       ids.sort();
       final String chatId = ids.join("_");
 
+      final String encryptedMsg = EncryptionService.encryptMessage(
+        messageText,
+        chatId,
+      );
+
       await FirebaseFirestore.instance.collection('chats').doc(chatId).set({
         'participants': [adminId, userId],
-        'lastMessage':
-            "⚠️ ADMIN WARNING: Regarding ${contextInfo ?? 'listing guidelines'}",
+        'lastMessage': encryptedMsg,
         'lastMessageTime': FieldValue.serverTimestamp(),
         'lastSenderId': adminId,
         'userNames': {adminId: "PriceSpy Admin", userId: name},
         'userAvatars': {adminId: null, userId: photo},
+        'unread_$userId': FieldValue.increment(1),
+        'visibleFor': FieldValue.arrayUnion([adminId, userId]),
       }, SetOptions(merge: true));
 
+      await FirebaseFirestore.instance
+          .collection('chats')
+          .doc(chatId)
+          .collection('messages')
+          .add({
+            'senderId': adminId,
+            'receiverId': userId,
+            'text': encryptedMsg,
+            'type': 'text',
+            'status': 'sent',
+            'timestamp': FieldValue.serverTimestamp(),
+            'deletedFor': [],
+            'isDeleted': false,
+          });
+
       if (!mounted) return;
+
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -143,6 +322,7 @@ class _AdminDashboardState extends State<AdminDashboard>
         ),
       );
     } catch (e) {
+      debugPrint("Error details: $e");
       _showSnackBar("Chat Error: $e", isError: true);
     }
   }
@@ -154,6 +334,7 @@ class _AdminDashboardState extends State<AdminDashboard>
   ) async {
     final TextEditingController durationController = TextEditingController();
     String durationType = 'Hours';
+
     await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -230,27 +411,36 @@ class _AdminDashboardState extends State<AdminDashboard>
       });
       _showSnackBar("User restricted for $amount $type.");
     } catch (e) {
-      _showSnackBar("Action failed.", isError: true);
+      _showSnackBar("Action failed: $e", isError: true);
     }
   }
 
   Future<void> _liftRestriction(String userId) async {
-    await FirebaseFirestore.instance.collection('users').doc(userId).update({
-      'isRestricted': false,
-      'restrictedUntil': null,
-    });
-    _showSnackBar("Restriction lifted.");
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(userId).update({
+        'isRestricted': false,
+        'restrictedUntil': null,
+      });
+      _showSnackBar("Restriction lifted.");
+    } catch (e) {
+      _showSnackBar("Failed to lift restriction: $e", isError: true);
+    }
   }
 
   Future<void> _deleteUserRecord(String userId) async {
-    await FirebaseFirestore.instance.collection('users').doc(userId).delete();
-    _showSnackBar("User deleted from database.");
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(userId).delete();
+      _showSnackBar("User profile deleted (Auth account remains).");
+    } catch (e) {
+      _showSnackBar("Failed to delete user: $e", isError: true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_isAdmin())
+    if (!_isAdmin()) {
       return const Scaffold(body: Center(child: Text("ACCESS DENIED")));
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -290,11 +480,13 @@ class _AdminDashboardState extends State<AdminDashboard>
           .where('status', isEqualTo: 'pending')
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         final docs = snapshot.data!.docs;
-        if (docs.isEmpty)
+        if (docs.isEmpty) {
           return const Center(child: Text("No pending reports."));
+        }
 
         return ListView.builder(
           padding: const EdgeInsets.symmetric(vertical: 10),
@@ -335,7 +527,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => Container(
+      builder: (sheetContext) => Container(
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -359,7 +551,8 @@ class _AdminDashboardState extends State<AdminDashboard>
               title: const Text("Investigate Content"),
               subtitle: const Text("Open post details"),
               onTap: () async {
-                Navigator.pop(context);
+                Navigator.pop(sheetContext);
+
                 showDialog(
                   context: context,
                   barrierDismissible: false,
@@ -368,29 +561,42 @@ class _AdminDashboardState extends State<AdminDashboard>
                 );
 
                 try {
+                  final String? postId = data['postId'];
+                  if (postId == null || postId.isEmpty) {
+                    throw Exception("Report is missing Post ID");
+                  }
+
                   final post = await FirebaseFirestore.instance
                       .collection('posts')
-                      .doc(data['postId'])
-                      .get();
-                  if (!mounted) return;
-                  Navigator.pop(context);
+                      .doc(postId)
+                      .get()
+                      .timeout(const Duration(seconds: 10));
 
-                  if (post.exists) {
+                  if (!mounted) return;
+                  Navigator.of(context).pop();
+
+                  if (post.exists && post.data() != null) {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (c) => ProductDetailsPage(
                           data: post.data()!,
                           documentId: post.id,
+                          userPosition: null, // Admin sees NO location filter
                         ),
                       ),
                     );
                   } else {
-                    _showSnackBar("Post no longer exists.", isError: true);
+                    _showSnackBar(
+                      "This post has already been deleted.",
+                      isError: true,
+                    );
                   }
                 } catch (e) {
-                  Navigator.pop(context);
-                  _showSnackBar("Failed to fetch post details.", isError: true);
+                  if (mounted && Navigator.canPop(context)) {
+                    Navigator.of(context).pop();
+                  }
+                  _showSnackBar("Error: ${e.toString()}", isError: true);
                 }
               },
             ),
@@ -401,8 +607,8 @@ class _AdminDashboardState extends State<AdminDashboard>
               ),
               title: const Text("Warning Chat with Accused"),
               onTap: () {
-                Navigator.pop(context);
-                _openWarningChat(
+                Navigator.pop(sheetContext);
+                _showWarningComposeDialog(
                   data['uploaderId'],
                   contextInfo: data['productName'],
                 );
@@ -412,7 +618,7 @@ class _AdminDashboardState extends State<AdminDashboard>
               leading: const Icon(Icons.delete_forever, color: Colors.red),
               title: const Text("Delete Post Forever"),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(sheetContext);
                 _deletePostPermanently(
                   reportId,
                   data['postId'],
@@ -428,7 +634,7 @@ class _AdminDashboardState extends State<AdminDashboard>
               ),
               title: const Text("Dismiss Report"),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(sheetContext);
                 FirebaseFirestore.instance
                     .collection('reports')
                     .doc(reportId)
@@ -454,11 +660,12 @@ class _AdminDashboardState extends State<AdminDashboard>
               prefixIcon: const Icon(Icons.search),
               filled: true,
               fillColor: Colors.white,
+              // 🟢 MOVED: contentPadding belongs here, NOT in OutlineInputBorder
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(30),
                 borderSide: BorderSide.none,
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
             ),
             onChanged: (v) =>
                 setState(() => _userSearchQuery = v.toLowerCase()),
@@ -513,7 +720,6 @@ class _AdminDashboardState extends State<AdminDashboard>
                         userData['displayName'] ?? "User",
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      // FORMATTED DATE USAGE HERE
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -596,7 +802,7 @@ class _AdminDashboardState extends State<AdminDashboard>
             title: const Text("Send Warning Message"),
             onTap: () {
               Navigator.pop(context);
-              _openWarningChat(userId);
+              _showWarningComposeDialog(userId);
             },
           ),
           ListTile(

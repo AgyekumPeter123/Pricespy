@@ -23,10 +23,9 @@ class SpyResultsPage extends StatelessWidget {
     required this.userPosition,
   });
 
-  // --- UPDATED: STEP-SAMPLING FOR ACCURATE SPY RESULTS ---
+  // --- 🟢 Fix 4: High-Precision 36-point Sweep for consistency ---
   Future<String> _getCoverageSummary() async {
     try {
-      // 1. Get Home Town first
       List<Placemark> homeMarks = await placemarkFromCoordinates(
         userPosition.latitude,
         userPosition.longitude,
@@ -35,50 +34,50 @@ class SpyResultsPage extends StatelessWidget {
           ? (homeMarks.first.locality ?? "your area")
           : "your area";
 
+      List<double> bearings = List.generate(36, (i) => i * 10.0);
       Map<String, String> directionalFrontier = {};
-      Map<String, List<double>> cardinalBearings = {
-        'North': [0, 330, 30],
-        'East': [90, 60, 120],
-        'South': [180, 150, 210],
-        'West': [270, 240, 300],
+
+      List<double> steps = [];
+      for (double i = 2.0; i <= radiusKm; i += 2.0) steps.add(i);
+      if (steps.isEmpty || steps.last != radiusKm) steps.add(radiusKm);
+
+      Map<String, List<double>> sectors = {
+        'North': bearings.where((b) => b >= 315 || b <= 45).toList(),
+        'East': bearings.where((b) => b > 45 && b <= 135).toList(),
+        'South': bearings.where((b) => b > 135 && b <= 225).toList(),
+        'West': bearings.where((b) => b > 225 && b < 315).toList(),
       };
 
-      // FIX: Add .0 to the integers
-      List<double> steps = [
-        5.0,
-        10.0,
-        15.0,
-        20.0,
-        radiusKm,
-      ].where((s) => s <= radiusKm).toList();
-
-      for (var entry in cardinalBearings.entries) {
-        String? lastFoundTown;
-        double lastFoundDistance = 0;
-
-        for (double b in entry.value) {
+      for (var s in sectors.entries) {
+        String? lastTown;
+        double lastDist = 0;
+        for (double b in s.value) {
           for (double d in steps) {
-            String? town = await _getTownAtRadius(userPosition, d, b);
-            if (town != null && town.isNotEmpty) {
-              lastFoundTown = town;
-              lastFoundDistance = d;
+            String? t = await _getTownAtRadius(userPosition, d, b);
+            if (t != null && t.isNotEmpty && t != homeTown) {
+              lastTown = t;
+              lastDist = d;
             }
           }
         }
-
-        if (lastFoundTown != null) {
-          double beyond = radiusKm - lastFoundDistance;
-          directionalFrontier[entry.key] = beyond > 3
-              ? "$lastFoundTown (+${beyond.toInt()}km beyond)"
-              : lastFoundTown;
+        if (lastTown != null) {
+          double beyond = radiusKm - lastDist;
+          directionalFrontier[s.key] = beyond > 1.0
+              ? "$lastTown (+${beyond.toInt()}km)"
+              : lastTown;
         } else {
-          directionalFrontier[entry.key] = homeTown;
+          directionalFrontier[s.key] = "Rural";
         }
       }
 
       List<String> summary = [];
-      directionalFrontier.forEach((dir, info) => summary.add("$dir ($info)"));
-      return "At ${radiusKm.toInt()}km, coverage reaches ${summary.join(', ')}.";
+      directionalFrontier.forEach((k, v) {
+        if (v != "Rural") summary.add("$k: $v");
+      });
+
+      return summary.isEmpty
+          ? "Scanning within ${radiusKm.toInt()}km of $homeTown."
+          : "Reach: ${summary.join(', ')}.";
     } catch (e) {
       return "Discovery area reaches ${radiusKm.toInt()}km.";
     }
@@ -87,19 +86,21 @@ class SpyResultsPage extends StatelessWidget {
   Future<String?> _getTownAtRadius(
     Position start,
     double dist,
-    double brngDegrees,
+    double brng,
   ) async {
     try {
       const double R = 6371.0;
-      double brng = brngDegrees * (pi / 180);
+      double radBrng = brng * (pi / 180);
       double dR = dist / R;
       double lat1 = start.latitude * (pi / 180);
       double lon1 = start.longitude * (pi / 180);
-      double lat2 = asin(sin(lat1) * cos(dR) + cos(lat1) * sin(dR) * cos(brng));
+      double lat2 = asin(
+        sin(lat1) * cos(dR) + cos(lat1) * sin(dR) * cos(radBrng),
+      );
       double lon2 =
           lon1 +
           atan2(
-            sin(brng) * sin(dR) * cos(lat1),
+            sin(radBrng) * sin(dR) * cos(lat1),
             cos(dR) - sin(lat1) * sin(lat2),
           );
       List<Placemark> marks = await placemarkFromCoordinates(
@@ -108,12 +109,12 @@ class SpyResultsPage extends StatelessWidget {
       );
       if (marks.isNotEmpty) {
         Placemark p = marks[0];
-        String? name = p.locality ?? p.subLocality ?? p.name;
-        if (name != null &&
-            name.length > 2 &&
-            !name.contains('+') &&
-            name.toLowerCase() != "unnamed road")
-          return name;
+        String? n = p.locality ?? p.subLocality ?? p.name;
+        if (n != null &&
+            n.length > 2 &&
+            !n.contains('+') &&
+            n.toLowerCase() != "unnamed road")
+          return n;
       }
     } catch (_) {}
     return null;
@@ -133,7 +134,6 @@ class SpyResultsPage extends StatelessWidget {
         ),
         backgroundColor: Colors.green[800],
         foregroundColor: Colors.white,
-        elevation: 0,
       ),
       body: Column(
         children: [
@@ -187,6 +187,7 @@ class SpyResultsPage extends StatelessWidget {
                   return const Center(child: CircularProgressIndicator());
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
                   return _buildEmptyState();
+
                 final docs = snapshot.data!.docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
                   double dist = Geolocator.distanceBetween(
@@ -197,7 +198,9 @@ class SpyResultsPage extends StatelessWidget {
                   );
                   return dist <= (radiusKm * 1000);
                 }).toList();
+
                 if (docs.isEmpty) return _buildEmptyState();
+
                 return ListView.builder(
                   padding: const EdgeInsets.only(top: 10, bottom: 20),
                   itemCount: docs.length,

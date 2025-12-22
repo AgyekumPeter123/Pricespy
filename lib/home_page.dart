@@ -7,12 +7,15 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
+// Project imports
 import 'add_price_sheet.dart';
 import 'product_details_page.dart';
 import 'sidebar_drawer.dart';
 import 'comment_sheet.dart';
 import 'screens/chat/chat_screen.dart';
-import 'SpyResultsPage.dart';
+// import 'SpyResultsPage.dart'; // No longer needed here as auto-snackbar is removed
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -23,8 +26,16 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final User? user = FirebaseAuth.instance.currentUser;
+
+  // 1. STATIC CACHE: Persists across navigation (Home -> Details -> Home)
+  static Position? _cachedPosition;
+  static bool _hasLoadedOnce = false;
+
+  // Instance variables
   Position? _myPosition;
   double _searchRadiusKm = 20.0;
+  bool _isLocationReady = false;
+
   String _selectedFilter = "Nearest Me";
   final List<String> _filters = [
     "Nearest Me",
@@ -39,7 +50,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadSettings();
-    _getCurrentLocation();
+    _initLocationLogic();
 
     _searchController.addListener(() {
       if (mounted) {
@@ -65,122 +76,183 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _getCurrentLocation() async {
+  // --- SMART LOCATION LOGIC WITH FRESHNESS CHECK ---
+  Future<void> _initLocationLogic() async {
+    // 1. Memory Cache (Fastest) - Always fresh for this session
+    if (_hasLoadedOnce && _cachedPosition != null) {
+      if (mounted) {
+        setState(() {
+          _myPosition = _cachedPosition;
+          _isLocationReady = true;
+        });
+        // Removed auto-spy check: _checkSpyAlerts();
+      }
+      return;
+    }
+
+    // 2. Disk Cache (SharedPreferences) - CHECK FRESHNESS
+    final prefs = await SharedPreferences.getInstance();
+    double? savedLat = prefs.getDouble('last_latitude');
+    double? savedLng = prefs.getDouble('last_longitude');
+    int? savedTime = prefs.getInt('last_location_time');
+
+    bool isCacheValid = false;
+
+    if (savedLat != null && savedLng != null && savedTime != null) {
+      final lastSaved = DateTime.fromMillisecondsSinceEpoch(savedTime);
+      final diff = DateTime.now().difference(lastSaved);
+
+      // RULE: If cache is younger than 30 minutes, trust it.
+      // If older, ignore it (assume user moved) and wait for GPS.
+      if (diff.inMinutes < 30) {
+        isCacheValid = true;
+        if (mounted) {
+          setState(() {
+            _myPosition = Position(
+              latitude: savedLat,
+              longitude: savedLng,
+              timestamp: lastSaved,
+              accuracy: 0,
+              altitude: 0,
+              heading: 0,
+              speed: 0,
+              speedAccuracy: 0,
+              altitudeAccuracy: 0,
+              headingAccuracy: 0,
+            );
+            _isLocationReady = true; // Show UI immediately!
+          });
+        }
+      }
+    }
+
+    // 3. Trigger Background Refresh
+    // If cache was valid, we do a cheap "medium" accuracy update.
+    // If cache was invalid/stale, we force "high" accuracy.
+    _getCurrentLocation(forceHighAccuracy: !isCacheValid);
+  }
+
+  Future<void> _getCurrentLocation({bool forceHighAccuracy = false}) async {
     try {
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) return;
       }
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+
+      // FIX #1: Respect forceHighAccuracy to save battery/speed
+      // Background updates use Medium, Fresh loads use High
+      Position freshPosition = await Geolocator.getCurrentPosition(
+        desiredAccuracy: forceHighAccuracy
+            ? LocationAccuracy.high
+            : LocationAccuracy.medium,
       );
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble('last_latitude', freshPosition.latitude);
+      await prefs.setDouble('last_longitude', freshPosition.longitude);
+      await prefs.setInt(
+        'last_location_time',
+        DateTime.now().millisecondsSinceEpoch,
+      );
+
+      _cachedPosition = freshPosition;
+      _hasLoadedOnce = true;
+
       if (mounted) {
-        setState(() => _myPosition = position);
-        _checkSpyAlerts();
+        setState(() {
+          _myPosition = freshPosition;
+          _isLocationReady = true;
+        });
+        // Removed auto-spy check: _checkSpyAlerts();
       }
     } catch (e) {
       debugPrint("GPS Error: $e");
+      // Even if GPS fails, ensure we stop showing skeletons so users aren't stuck
+      if (mounted) setState(() => _isLocationReady = true);
     }
   }
 
-  Future<void> _checkSpyAlerts() async {
-    if (user == null || _myPosition == null) return;
-    try {
-      final watchlistSnap = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user!.uid)
-          .collection('watchlist')
-          .get();
-
-      if (watchlistSnap.docs.isEmpty) return;
-      final yesterday = DateTime.now().subtract(const Duration(hours: 24));
-
-      for (var alertDoc in watchlistSnap.docs) {
-        final alert = alertDoc.data();
-        final String searchKey = alert['search_key'] ?? '';
-        final double maxPrice = (alert['max_price'] ?? 999999).toDouble();
-        final double radiusMeters = (alert['radius_km'] ?? 5).toDouble() * 1000;
-
-        final matches = await FirebaseFirestore.instance
-            .collection('posts')
-            .where('search_key', isEqualTo: searchKey)
-            .where('price', isLessThanOrEqualTo: maxPrice)
-            .where('timestamp', isGreaterThan: Timestamp.fromDate(yesterday))
-            .get();
-
-        int matchCount = 0;
-        for (var post in matches.docs) {
-          final postData = post.data();
-          double dist = Geolocator.distanceBetween(
-            _myPosition!.latitude,
-            _myPosition!.longitude,
-            (postData['latitude'] ?? 0).toDouble(),
-            (postData['longitude'] ?? 0).toDouble(),
-          );
-          if (dist <= radiusMeters) matchCount++;
-        }
-
-        if (matchCount > 0 && mounted) {
-          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.radar, color: Colors.white, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      "Found $matchCount '${alert['keyword']}' nearby!",
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: Colors.green[900],
-              duration: const Duration(seconds: 10),
-              behavior: SnackBarBehavior.floating,
-              action: SnackBarAction(
-                label: "VIEW",
-                textColor: Colors.yellowAccent,
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => SpyResultsPage(
-                        keyword: alert['keyword'],
-                        searchKey: searchKey,
-                        maxPrice: maxPrice,
-                        radiusKm: radiusMeters / 1000,
-                        userPosition: _myPosition!,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          );
-          break;
-        }
-      }
-    } catch (e) {
-      debugPrint("Spy Alert Error: $e");
-    }
-  }
+  // Auto Spy Alert Logic Removed per User Request (Fix 5)
 
   Future<void> _refreshAll() async {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text("Syncing settings and location..."),
-        duration: Duration(seconds: 1),
+        content: Text("Updating location..."),
+        duration: Duration(milliseconds: 1000),
       ),
     );
+    // On manual refresh, we always force fresh High Accuracy GPS
     await _loadSettings();
-    await _getCurrentLocation();
+    await _getCurrentLocation(forceHighAccuracy: true);
+  }
+
+  // --- SKELETON LOADER WIDGET ---
+  Widget _buildSkeletonLoader() {
+    return ListView.builder(
+      itemCount: 4,
+      padding: const EdgeInsets.only(top: 8),
+      itemBuilder: (context, index) {
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          height: 300,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                height: 180,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(16),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(height: 20, width: 150, color: Colors.grey[300]),
+                    const SizedBox(height: 8),
+                    Container(height: 20, width: 100, color: Colors.grey[300]),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Container(
+                          width: 60,
+                          height: 30,
+                          color: Colors.grey[300],
+                        ),
+                        const SizedBox(width: 20),
+                        Container(
+                          width: 60,
+                          height: 30,
+                          color: Colors.grey[300],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    // 7-day window for freshness
+    final DateTime sevenDaysAgo = DateTime.now().subtract(
+      const Duration(days: 7),
+    );
+
     return Scaffold(
       backgroundColor: Colors.grey[100],
       drawer: const SidebarDrawer(isHome: true),
@@ -201,7 +273,7 @@ class _HomePageState extends State<HomePage> {
               IconButton(
                 onPressed: _refreshAll,
                 icon: const Icon(Icons.refresh, color: Colors.white),
-                tooltip: "Sync Settings",
+                tooltip: "Refresh Location & Feed",
               ),
               IconButton(
                 onPressed: () => showModalBottomSheet(
@@ -252,6 +324,7 @@ class _HomePageState extends State<HomePage> {
                           decoration: InputDecoration(
                             icon: const Icon(Icons.search, color: Colors.grey),
                             hintText: "Search cement, rice...",
+                            hintStyle: TextStyle(color: Colors.grey[500]),
                             border: InputBorder.none,
                             suffixIcon: _searchQuery.isNotEmpty
                                 ? IconButton(
@@ -333,19 +406,38 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('posts')
-                .orderBy('timestamp', descending: true)
-                .snapshots(),
+            // FIX #2: Pass NULL if location isn't ready.
+            // This prevents Firestore reads until we know where we are.
+            stream: _isLocationReady
+                ? FirebaseFirestore.instance
+                      .collection('posts')
+                      .where(
+                        'timestamp',
+                        isGreaterThan: Timestamp.fromDate(sevenDaysAgo),
+                      )
+                      .orderBy('timestamp', descending: true)
+                      .limit(150)
+                      .snapshots()
+                : null,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting)
-                return const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
+              if (snapshot.hasError) {
+                return SliverFillRemaining(
+                  child: Center(child: Text("Error: ${snapshot.error}")),
                 );
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
+              }
+
+              // --- WAITING STATES ---
+              // If stream is null (ConnectionState.none) or waiting, show Skeleton
+              if (snapshot.connectionState == ConnectionState.none ||
+                  snapshot.connectionState == ConnectionState.waiting) {
+                return SliverFillRemaining(child: _buildSkeletonLoader());
+              }
+
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                 return const SliverFillRemaining(
-                  child: Center(child: Text("No intel yet.")),
+                  child: Center(child: Text("No recent intel found.")),
                 );
+              }
 
               var docs = snapshot.data!.docs;
               docs = docs
@@ -383,6 +475,9 @@ class _HomePageState extends State<HomePage> {
                   );
                   return dist <= (_searchRadiusKm * 1000);
                 }).toList();
+              } else {
+                // Fallback if position is null (Safety check)
+                return SliverFillRemaining(child: _buildSkeletonLoader());
               }
 
               if (_selectedFilter == "Shops Only") {
@@ -402,10 +497,11 @@ class _HomePageState extends State<HomePage> {
               docs.sort((a, b) {
                 final dataA = a.data() as Map<String, dynamic>;
                 final dataB = b.data() as Map<String, dynamic>;
-                if (_selectedFilter == "Cheapest")
+                if (_selectedFilter == "Cheapest") {
                   return ((dataA['price'] ?? 0) as num).compareTo(
                     (dataB['price'] ?? 0) as num,
                   );
+                }
                 if (_myPosition == null) return 0;
                 double distA = Geolocator.distanceBetween(
                   _myPosition!.latitude,
@@ -506,38 +602,49 @@ class IntelCard extends StatelessWidget {
         'phone': data['phone'],
         'whatsapp_phone': data['whatsapp_phone'],
         'original_id': docId,
+        // FIX 1: Save Uploader ID for comments to work later
+        'uploader_id': data['uploader_id'],
         'saved_at': FieldValue.serverTimestamp(),
       });
     }
   }
 
-  void _showLongPressOptions(BuildContext context, String receiverId) {
+  void _showLongPressOptions(BuildContext parentContext, String receiverId) {
     if (userUid.isEmpty || receiverId == userUid) return;
 
     showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        height: 160,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      context: parentContext,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Wrap(
           children: [
-            const Text(
-              "Chat with Seller",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(
-                Icons.chat_bubble_rounded,
-                color: Colors.green,
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Chat with Seller",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.chat_bubble_rounded,
+                      color: Colors.green,
+                    ),
+                    title: const Text("Start Private Chat"),
+                    subtitle: const Text("Secure end-to-end encrypted"),
+                    onTap: () {
+                      Navigator.pop(sheetContext); // Close sheet
+                      _startPrivateChat(
+                        parentContext,
+                        receiverId,
+                      ); // Start chat
+                    },
+                  ),
+                ],
               ),
-              title: const Text("Start Private Chat"),
-              subtitle: const Text("Secure end-to-end encrypted"),
-              onTap: () {
-                Navigator.pop(context);
-                _startPrivateChat(context, receiverId);
-              },
             ),
           ],
         ),
@@ -562,6 +669,7 @@ class IntelCard extends StatelessWidget {
           .collection('users')
           .doc(receiverId)
           .get();
+
       if (!context.mounted) return;
       Navigator.pop(context);
 
@@ -764,8 +872,8 @@ class IntelCard extends StatelessWidget {
                       ),
                       _actionBtn(
                         context,
-                        Icons.message,
-                        "Chat",
+                        FontAwesomeIcons.whatsapp,
+                        "WhatsApp",
                         Colors.teal,
                         () => _openWhatsApp(context, whatsapp),
                       ),

@@ -116,11 +116,14 @@ class ChatInput extends StatelessWidget {
           ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          color: Colors.white,
+          // FIX: Changed from Colors.white to Colors.transparent
+          color: Colors.transparent,
           child: Stack(
             alignment: Alignment.centerRight,
+            clipBehavior: Clip.none,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   if (!isRecording)
                     IconButton(
@@ -129,9 +132,12 @@ class ChatInput extends StatelessWidget {
                     ),
                   Expanded(
                     child: isRecording
-                        ? Text(
-                            "Slide to cancel <   Recording: $recordDuration",
-                            style: const TextStyle(color: Colors.grey),
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Text(
+                              "Slide to cancel <   Recording: $recordDuration",
+                              style: const TextStyle(color: Colors.grey),
+                            ),
                           )
                         : TextField(
                             controller: controller,
@@ -153,42 +159,51 @@ class ChatInput extends StatelessWidget {
                             onChanged: onTyping,
                           ),
                   ),
-                  const SizedBox(width: 56),
+                  // Spacer width 70 to keep gap between field and button
+                  const SizedBox(width: 70, height: 60),
                 ],
               ),
               Positioned(
                 right: 0,
-                bottom: 0,
+                bottom: -7, // Pushed down to align
                 child: ValueListenableBuilder<TextEditingValue>(
                   valueListenable: controller,
                   builder: (context, value, child) {
-                    bool hasText = value.text.isNotEmpty;
+                    bool hasText = value.text.trim().isNotEmpty;
+
                     return GestureDetector(
-                      onLongPressMoveUpdate: (details) {
-                        if (!hasText) {
-                          if (details.offsetFromOrigin.dy < -50)
-                            onLockRecording();
-                          if (details.offsetFromOrigin.dx < -100)
-                            onCancelRecording();
-                        }
-                      },
-                      onLongPress: () {
-                        if (!hasText) onStartRecording();
-                      },
-                      onLongPressEnd: (details) {
-                        if (isRecording && !isLocked) onStopRecording(true);
-                      },
+                      behavior: HitTestBehavior.translucent,
+                      onLongPressMoveUpdate: hasText
+                          ? null
+                          : (details) {
+                              if (details.offsetFromOrigin.dy < -50)
+                                onLockRecording();
+                              if (details.offsetFromOrigin.dx < -100)
+                                onCancelRecording();
+                            },
+                      onLongPress: hasText ? null : onStartRecording,
+                      onLongPressEnd: hasText
+                          ? null
+                          : (details) {
+                              if (isRecording && !isLocked)
+                                onStopRecording(true);
+                            },
+
                       onTap: () {
                         if (hasText) onSendMessage(controller.text.trim());
                       },
-                      child: CircleAvatar(
-                        radius: 24,
-                        backgroundColor: Colors.green[800],
-                        child: Icon(
-                          !hasText
-                              ? (isRecording ? Icons.mic : Icons.mic_none)
-                              : Icons.send,
-                          color: Colors.white,
+                      child: Container(
+                        padding: const EdgeInsets.all(8.0),
+                        color: Colors.transparent,
+                        child: CircleAvatar(
+                          radius: 24,
+                          backgroundColor: Colors.green[800],
+                          child: Icon(
+                            !hasText
+                                ? (isRecording ? Icons.mic : Icons.mic_none)
+                                : Icons.send,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     );
@@ -197,8 +212,8 @@ class ChatInput extends StatelessWidget {
               ),
               if (isRecording && !isLocked)
                 Positioned(
-                  right: 6,
-                  bottom: 60,
+                  right: 14,
+                  bottom: 76,
                   child: Column(
                     children: const [
                       Icon(Icons.lock_open, size: 16, color: Colors.grey),

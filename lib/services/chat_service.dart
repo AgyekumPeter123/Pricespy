@@ -168,12 +168,26 @@ class ChatService {
         'expiresAt': Timestamp.fromDate(expiryDate),
       });
 
-      String preview = type == 'text' ? caption : "Sent a $type";
-      if (type == 'audio') preview = "🎤 Voice Message";
+      // 🟢 FIX: Ensure preview text is never empty/null to prevent "Error Decrypting"
+      String preview = caption.isNotEmpty ? caption : _getMediaTypeLabel(type);
 
       await _updateLastMessage(preview, status: finalStatus);
     } catch (e) {
       await messageRef.update({'status': 'error'});
+    }
+  }
+
+  // 🟢 Helper to get clean labels for media types
+  String _getMediaTypeLabel(String type) {
+    switch (type) {
+      case 'image':
+        return "📷 Photo";
+      case 'video':
+        return "🎥 Video";
+      case 'audio':
+        return "🎤 Voice Message";
+      default:
+        return "📁 File";
     }
   }
 
@@ -183,6 +197,9 @@ class ChatService {
   }) async {
     String myName = 'User';
     String? myPhoto;
+
+    // 🟢 FIX: Ensure we never encrypt an empty string
+    final String safePreview = preview.isEmpty ? "Message" : preview;
 
     try {
       final userDoc = await _db.collection('users').doc(myUid).get();
@@ -196,7 +213,7 @@ class ChatService {
     } catch (_) {}
 
     await _db.collection('chats').doc(chatId).set({
-      'lastMessage': EncryptionService.encryptMessage(preview, chatId),
+      'lastMessage': EncryptionService.encryptMessage(safePreview, chatId),
       'lastMessageTime': FieldValue.serverTimestamp(),
       'lastSenderId': myUid,
       'unread_$receiverId': FieldValue.increment(1),

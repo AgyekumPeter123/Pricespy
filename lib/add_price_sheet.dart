@@ -35,7 +35,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
   final _landmarkController = TextEditingController();
   final _shopNameController = TextEditingController();
 
-  // Focus Nodes (For Smooth Keyboard Navigation)
+  // Focus Nodes
   final FocusNode _nameFocus = FocusNode();
   final FocusNode _descFocus = FocusNode();
   final FocusNode _priceFocus = FocusNode();
@@ -102,7 +102,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
 
   @override
   void dispose() {
-    // Dispose FocusNodes to prevent memory leaks
     _nameFocus.dispose();
     _descFocus.dispose();
     _priceFocus.dispose();
@@ -112,7 +111,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     _locationFocus.dispose();
     _landmarkFocus.dispose();
 
-    // Dispose Controllers
     _nameController.dispose();
     _descriptionController.dispose();
     _priceController.dispose();
@@ -125,8 +123,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     super.dispose();
   }
 
-  // ... (Keep existing _detectLocation, _listenToDescription, _pickProductImage, _pickShopImage, _analyzeImage, _saveProduct logic exactly as is)
-
   Future<void> _detectLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return;
@@ -135,12 +131,16 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       permission = await Geolocator.requestPermission();
     if (permission == LocationPermission.denied) return;
 
-    Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
-    if (mounted) setState(() => _currentPosition = position);
+    // Show loading indicator in text field
+    if (mounted) setState(() => _locationController.text = "Detecting...");
 
     try {
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      // Update global position variable so _saveProduct uses the NEW coords
+      if (mounted) setState(() => _currentPosition = position);
+
       List<Placemark> placemarks = await placemarkFromCoordinates(
         position.latitude,
         position.longitude,
@@ -158,10 +158,17 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
             _locationController.text = address;
             _landmarkController.text = landmark;
           });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Location updated!"),
+              duration: Duration(seconds: 1),
+            ),
+          );
         }
       }
     } catch (e) {
       debugPrint("Address error: $e");
+      if (mounted) setState(() => _locationController.text = "");
     }
   }
 
@@ -169,11 +176,10 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     if (!_isListening) {
       var status = await Permission.microphone.request();
       if (status != PermissionStatus.granted) {
-        if (mounted) {
+        if (mounted)
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Microphone permission required")),
           );
-        }
         return;
       }
       bool available = await _speech.initialize(
@@ -211,14 +217,11 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
   }
 
   Future<void> _pickProductImage() async {
-    // 1. Capture/Pick the image using your helper
     final file = await _imageHelper.pickImage();
     if (file == null) return;
 
-    // 2. Open the cropper immediately
     final cropped = await ImageCropper().cropImage(
       sourcePath: file.path,
-      // FIX: Move presets inside uiSettings to resolve the 'undefined parameter' error
       uiSettings: [
         AndroidUiSettings(
           toolbarTitle: 'Edit Product Photo',
@@ -226,7 +229,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
           toolbarWidgetColor: Colors.white,
           initAspectRatio: CropAspectRatioPreset.square,
           lockAspectRatio: false,
-          // Correct placement for Android presets
           aspectRatioPresets: [
             CropAspectRatioPreset.square,
             CropAspectRatioPreset.ratio3x2,
@@ -235,7 +237,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         ),
         IOSUiSettings(
           title: 'Edit Product Photo',
-          // Correct placement for iOS presets
           aspectRatioPresets: [
             CropAspectRatioPreset.square,
             CropAspectRatioPreset.ratio3x2,
@@ -248,10 +249,8 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     if (cropped != null) {
       setState(() {
         _productImage = File(cropped.path);
-        _isAnalyzing = true; // Show loader in the preview box
+        _isAnalyzing = true;
       });
-
-      // 3. Start AI analysis after cropping is confirmed
       await _analyzeImage(File(cropped.path));
     }
   }
@@ -290,15 +289,13 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         options: ImageLabelerOptions(confidenceThreshold: 0.5),
       );
       final labels = await imageLabeler.processImage(inputImage);
-
       final textRecognizer = TextRecognizer();
       final recognizedText = await textRecognizer.processImage(inputImage);
 
       List<String> newSuggestions = [];
       String? foundPrice;
-      String? foundUnit; // NEW: Track the detected measurement unit
+      String? foundUnit;
 
-      // 1. Label Processing (Product Name Suggestions)
       final List<String> ignoredLabels = [
         'Room',
         'Furniture',
@@ -313,36 +310,26 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         if (!ignoredLabels.contains(l.label)) newSuggestions.add(l.label);
       }
 
-      // 2. Comprehensive Text Parsing
       for (TextBlock block in recognizedText.blocks) {
         String text = block.text.trim().toLowerCase();
 
-        // --- REGEX FOR MEASUREMENTS (Unit Field) ---
-        // Matches numbers followed by shop standards: g, grams, kg, ml, mililitres, litres, etc.
         final unitRegex = RegExp(
           r'(\d+(\.\d+)?)\s*(gram|grams|g|kg|kilogram|kilograms|ml|millilitre|millilitres|l|litre|litres|mm|cm|inches|inch|yard|yards|lb|oz)\b',
         );
-
         if (unitRegex.hasMatch(text)) {
           var match = unitRegex.firstMatch(text);
-          if (match != null) {
-            foundUnit = match.group(0); // This captures "500ml" or "2kg"
-          }
+          if (match != null) foundUnit = match.group(0);
           continue;
         }
 
-        // --- REGEX FOR CURRENCY (Price Field) ---
-        // Strictly requires symbols to differentiate from measurements
         final priceWithCurrencyRegex = RegExp(r'([₵$]|ghs)\s*(\d+(\.\d{2})?)');
         if (priceWithCurrencyRegex.hasMatch(text)) {
           var match = priceWithCurrencyRegex.firstMatch(text);
-          if (match != null) {
+          if (match != null)
             foundPrice = match.group(0)!.replaceAll(RegExp(r'[^0-9.]'), '');
-          }
           continue;
         }
 
-        // Name Suggestion if not a price or unit
         if (text.length > 3 && text.length < 20) {
           String cleanText = block.text.replaceAll(RegExp(r'[^\w\s]'), '');
           if (cleanText.isNotEmpty) newSuggestions.insert(0, cleanText);
@@ -352,18 +339,8 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       if (mounted) {
         setState(() {
           _aiSuggestions = newSuggestions.take(8).toList();
-
-          // Auto-fill the Price Controller
-          if (foundPrice != null) {
-            _priceController.text = foundPrice;
-          }
-
-          // Auto-fill the Unit/Size variable
-          if (foundUnit != null) {
-            _selectedUnit = foundUnit;
-            // Note: This updates the internal state; the Autocomplete widget
-            // will show this value on its next build.
-          }
+          if (foundPrice != null) _priceController.text = foundPrice;
+          if (foundUnit != null) _selectedUnit = foundUnit;
         });
       }
 
@@ -412,6 +389,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         'whatsapp_phone': whatsappNum,
         'location_name': _locationController.text.trim(),
         'landmark': _landmarkController.text.trim(),
+        // 🟢 FIX 3: Use _currentPosition if available (button pressed), else fallback to existing
         'latitude':
             _currentPosition?.latitude ??
             widget.existingData?['latitude'] ??
@@ -464,16 +442,21 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     }
   }
 
-  // --- SMOOTH UI WIDGETS ---
-
   InputDecoration _smoothDecoration(
     String label, {
     IconData? icon,
     Widget? suffix,
+    String? prefixText,
   }) {
     return InputDecoration(
       labelText: label,
       prefixIcon: icon != null ? Icon(icon, color: Colors.grey[600]) : null,
+      prefixText: prefixText,
+      prefixStyle: TextStyle(
+        color: Colors.green[800],
+        fontWeight: FontWeight.bold,
+        fontSize: 16,
+      ),
       suffixIcon: suffix,
       filled: true,
       fillColor: Colors.grey[100],
@@ -554,7 +537,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 1. Photo Picker (Clean & Smooth)
         GestureDetector(
           onTap: _pickProductImage,
           child: AnimatedContainer(
@@ -601,7 +583,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
           ),
         ),
 
-        // 2. AI Suggestions
         if (_aiSuggestions.isNotEmpty) ...[
           const SizedBox(height: 12),
           SizedBox(
@@ -627,17 +608,15 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
 
         const SizedBox(height: 20),
 
-        // 3. Name Field
         TextField(
           controller: _nameController,
           focusNode: _nameFocus,
-          textInputAction: TextInputAction.next, // KEY for smoothness
+          textInputAction: TextInputAction.next,
           decoration: _smoothDecoration("Product Name"),
         ),
 
         const SizedBox(height: 12),
 
-        // 4. Description with Mic
         TextField(
           controller: _descriptionController,
           focusNode: _descFocus,
@@ -657,7 +636,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
 
         const SizedBox(height: 12),
 
-        // 5. Shop Name or Condition
         if (_posterType == 'Shop Owner')
           TextField(
             controller: _shopNameController,
@@ -679,7 +657,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
 
         const SizedBox(height: 12),
 
-        // 6. Price and Unit Row
         Row(
           children: [
             Expanded(
@@ -689,10 +666,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
                 focusNode: _priceFocus,
                 keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.next,
-                decoration: _smoothDecoration(
-                  "Price",
-                  icon: Icons.attach_money,
-                ), // Using attach_money as simple icon, prefix text handles currency
+                decoration: _smoothDecoration("Price", prefixText: "₵ "),
               ),
             ),
             const SizedBox(width: 10),
@@ -702,15 +676,14 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
                 builder: (context, constraints) {
                   return Autocomplete<String>(
                     initialValue: TextEditingValue(text: _selectedUnit),
-                    optionsBuilder: (TextEditingValue textEditingValue) {
-                      if (textEditingValue.text == '') return _marketUnits;
-                      return _marketUnits.where((String option) {
-                        return option.toLowerCase().contains(
-                          textEditingValue.text.toLowerCase(),
-                        );
-                      });
+                    optionsBuilder: (TextEditingValue val) {
+                      if (val.text == '') return _marketUnits;
+                      return _marketUnits.where(
+                        (op) =>
+                            op.toLowerCase().contains(val.text.toLowerCase()),
+                      );
                     },
-                    onSelected: (String selection) => _selectedUnit = selection,
+                    onSelected: (String sel) => _selectedUnit = sel,
                     fieldViewBuilder:
                         (context, controller, focusNode, onFieldSubmitted) {
                           controller.addListener(() {
@@ -747,7 +720,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         ),
         const SizedBox(height: 12),
 
-        // 7. Phone
         TextField(
           controller: _phoneController,
           focusNode: _phoneFocus,
@@ -758,7 +730,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
 
         const SizedBox(height: 12),
 
-        // 8. Location
         TextField(
           controller: _locationController,
           focusNode: _locationFocus,
@@ -774,13 +745,30 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
 
         const SizedBox(height: 12),
 
-        // 9. Landmark
         TextField(
           controller: _landmarkController,
           focusNode: _landmarkFocus,
-          textInputAction: TextInputAction.done, // Closes keyboard
+          textInputAction: TextInputAction.done,
           decoration: _smoothDecoration("Closest Landmark", icon: Icons.flag),
         ),
+
+        // 🟢 FIX 4: Explicit Button to Update Location
+        if (widget.existingData != null) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _detectLocation,
+              icon: const Icon(Icons.my_location, size: 18),
+              label: const Text("Update GPS Location"),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.blue[700],
+                padding: EdgeInsets.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ),
+        ],
 
         if (_posterType == 'Shop Owner') ...[
           const SizedBox(height: 20),
@@ -819,7 +807,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
 
         const SizedBox(height: 30),
 
-        // 10. Submit Button
         ElevatedButton(
           onPressed: _isLoading ? null : _saveProduct,
           style: ElevatedButton.styleFrom(
@@ -845,15 +832,13 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
         ),
-        const SizedBox(height: 20), // Padding for bottom safe area
+        const SizedBox(height: 20),
       ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // FIX: Removed manual padding calculation.
-    // We let the SingleChildScrollView inside the sheet handle the content flow naturally.
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -862,7 +847,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Drag Handle
           Center(
             child: Container(
               margin: const EdgeInsets.only(top: 12, bottom: 8),
@@ -874,12 +858,15 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
               ),
             ),
           ),
-          // Scrollable Content
           Flexible(
             child: SingleChildScrollView(
-              physics:
-                  const BouncingScrollPhysics(), // Smooth iOS-style scrolling
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                0,
+                20,
+                MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
               child: _currentStep == 0 ? _buildTypeSelection() : _buildForm(),
             ),
           ),

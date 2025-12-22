@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'sidebar_drawer.dart'; // <--- IMPORT THIS
+import 'sidebar_drawer.dart';
 
 class MyPostCommentsPage extends StatefulWidget {
   const MyPostCommentsPage({super.key});
@@ -15,6 +15,33 @@ class _MyPostCommentsPageState extends State<MyPostCommentsPage> {
   final User? currentUser = FirebaseAuth.instance.currentUser;
 
   @override
+  void initState() {
+    super.initState();
+    _markRepliesAsRead();
+  }
+
+  Future<void> _markRepliesAsRead() async {
+    if (currentUser == null) return;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser!.uid)
+          .collection('notifications')
+          .where('read', isEqualTo: false)
+          .where('type', isEqualTo: 'reply')
+          .get();
+
+      final batch = FirebaseFirestore.instance.batch();
+      for (var doc in snapshot.docs) {
+        batch.update(doc.reference, {'read': true});
+      }
+      await batch.commit();
+    } catch (e) {
+      debugPrint("Error clearing badges: $e");
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     if (currentUser == null) {
       return const Scaffold(
@@ -23,13 +50,11 @@ class _MyPostCommentsPageState extends State<MyPostCommentsPage> {
     }
 
     return Scaffold(
-      // 1. ADD DRAWER
       drawer: const SidebarDrawer(),
       appBar: AppBar(
         title: const Text("Comments"),
         backgroundColor: Colors.green[800],
         foregroundColor: Colors.white,
-        // 2. FORCE HAMBURGER
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
@@ -80,7 +105,6 @@ class _MyPostCommentsPageState extends State<MyPostCommentsPage> {
   }
 }
 
-// --- SUB WIDGET (Kept logic same, just re-listing for completeness) ---
 class _CommentThreadCard extends StatefulWidget {
   final String postId;
   final Map<String, dynamic> postData;
@@ -103,11 +127,15 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
   String? _activeCommentId;
   String? _taggedUserName;
   String? _taggedUserId;
+  bool _isSending = false; // Added to prevent double taps
 
   Future<void> _sendReply(String text) async {
-    if (text.trim().isEmpty) return;
+    if (text.trim().isEmpty || _activeCommentId == null || _isSending) return;
+
+    setState(() => _isSending = true);
 
     try {
+      // 1. Add Comment
       await FirebaseFirestore.instance
           .collection('posts')
           .doc(widget.postId)
@@ -120,20 +148,23 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
             'timestamp': FieldValue.serverTimestamp(),
             'is_seller_reply': true,
             'tagged_user': _taggedUserName,
+            'replyToId': _activeCommentId,
           });
 
+      // 2. Update Post Timestamp
       await FirebaseFirestore.instance
           .collection('posts')
           .doc(widget.postId)
           .update({'last_comment_time': FieldValue.serverTimestamp()});
 
+      // 3. Send Notification
       if (_taggedUserId != null && _taggedUserId != widget.currentUser.uid) {
         await FirebaseFirestore.instance
             .collection('users')
             .doc(_taggedUserId)
             .collection('notifications')
             .add({
-              'type': 'reply',
+              'type': 'reply', // IMPORTANT: this type helps separate badges
               'post_id': widget.postId,
               'message':
                   'The seller replied to your comment on "${widget.postData['product_name']}"',
@@ -142,17 +173,34 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
             });
       }
 
-      _cancelReply();
+      // 4. Success UI Updates
       if (mounted) {
+        _cancelReply(); // Clears field and closes box
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Reply sent!"),
+            backgroundColor: Colors.green,
             duration: Duration(seconds: 1),
           ),
         );
       }
     } catch (e) {
       debugPrint("Error replying: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text("Failed to send. Please retry."),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () => _sendReply(text),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSending = false);
     }
   }
 
@@ -214,7 +262,7 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
       _activeCommentId = null;
       _taggedUserId = null;
       _taggedUserName = null;
-      _replyController.clear();
+      _replyController.clear(); // Clears the text
     });
     _replyFocusNode.unfocus();
   }
@@ -241,11 +289,16 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
             .collection('posts')
             .doc(widget.postId)
             .collection('comments')
-            .orderBy('timestamp', descending: true)
+            .orderBy('timestamp', descending: false)
             .snapshots(),
         builder: (context, snapshot) {
-          int commentCount = 0;
-          if (snapshot.hasData) commentCount = snapshot.data!.docs.length;
+          if (!snapshot.hasData) return const SizedBox();
+          final allDocs = snapshot.data!.docs;
+
+          final rootComments = allDocs.where((doc) {
+            final d = doc.data() as Map<String, dynamic>;
+            return d['replyToId'] == null;
+          }).toList();
 
           return ExpansionTile(
             leading: ClipRRect(
@@ -275,9 +328,9 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
-              "$commentCount comments",
+              "${allDocs.length} comments",
               style: TextStyle(
-                color: commentCount > 0 ? Colors.green[800] : Colors.grey,
+                color: allDocs.isNotEmpty ? Colors.green[800] : Colors.grey,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -285,210 +338,34 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
             children: [
               Container(
                 color: Colors.grey[50],
-                constraints: const BoxConstraints(maxHeight: 400),
-                child: snapshot.connectionState == ConnectionState.waiting
-                    ? const Center(child: CircularProgressIndicator())
-                    : commentCount == 0
+                constraints: const BoxConstraints(maxHeight: 450),
+                child: rootComments.isEmpty
                     ? const Padding(
                         padding: EdgeInsets.all(20),
                         child: Text("No comments yet."),
                       )
                     : ListView.builder(
                         shrinkWrap: true,
-                        itemCount: commentCount,
+                        itemCount: rootComments.length,
                         itemBuilder: (context, i) {
-                          final commentDoc = snapshot.data!.docs[i];
-                          final cData =
-                              commentDoc.data() as Map<String, dynamic>;
-                          final commentId = commentDoc.id;
-                          final bool isMe =
-                              cData['uid'] == widget.currentUser.uid;
-                          final String senderName = cData['username'] ?? 'User';
-                          final bool isReplyingToThis =
-                              _activeCommentId == commentId;
+                          final rootDoc = rootComments[i];
+                          final rootId = rootDoc.id;
+
+                          final replies = allDocs.where((doc) {
+                            final d = doc.data() as Map<String, dynamic>;
+                            return d['replyToId'] == rootId;
+                          }).toList();
 
                           return Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              ListTile(
-                                dense: true,
-                                leading: CircleAvatar(
-                                  backgroundColor: isMe
-                                      ? Colors.green[100]
-                                      : Colors.blue[100],
-                                  radius: 14,
-                                  backgroundImage:
-                                      (cData['avatar'] != null &&
-                                          cData['avatar'].isNotEmpty)
-                                      ? CachedNetworkImageProvider(
-                                          cData['avatar'],
-                                        )
-                                      : null,
-                                  child:
-                                      (cData['avatar'] == null ||
-                                          cData['avatar'].isEmpty)
-                                      ? Icon(
-                                          isMe ? Icons.store : Icons.person,
-                                          size: 16,
-                                          color: isMe
-                                              ? Colors.green[800]
-                                              : Colors.blue[800],
-                                        )
-                                      : null,
+                              _buildCommentItem(rootDoc, isReply: false),
+                              ...replies.map(
+                                (r) => Padding(
+                                  padding: const EdgeInsets.only(left: 35),
+                                  child: _buildCommentItem(r, isReply: true),
                                 ),
-                                title: Text(
-                                  senderName,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: isMe
-                                        ? Colors.green[900]
-                                        : Colors.black87,
-                                  ),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (cData['tagged_user'] != null)
-                                      Text(
-                                        "@${cData['tagged_user']}",
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.blue[800],
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    Text(cData['text'] ?? ''),
-                                  ],
-                                ),
-                                trailing: !isMe
-                                    ? TextButton(
-                                        onPressed: () => _activateReplyBox(
-                                          commentId,
-                                          cData['uid'] ?? '',
-                                          senderName,
-                                        ),
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 5,
-                                          ),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        child: const Text(
-                                          "Reply",
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      )
-                                    : TextButton(
-                                        onPressed: () =>
-                                            _deleteComment(commentId),
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 5,
-                                          ),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        child: const Text(
-                                          "Delete",
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.red,
-                                          ),
-                                        ),
-                                      ),
                               ),
-                              if (isReplyingToThis)
-                                Container(
-                                  margin: const EdgeInsets.only(
-                                    left: 20,
-                                    right: 10,
-                                    bottom: 10,
-                                  ),
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: Colors.green.shade200,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.05),
-                                        blurRadius: 5,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            "Replying to @$_taggedUserName",
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.green[800],
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          GestureDetector(
-                                            onTap: _cancelReply,
-                                            child: const Icon(
-                                              Icons.close,
-                                              size: 16,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 5),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: TextField(
-                                              controller: _replyController,
-                                              focusNode: _replyFocusNode,
-                                              decoration: const InputDecoration(
-                                                hintText: "Type your reply...",
-                                                isDense: true,
-                                                border: InputBorder.none,
-                                                contentPadding: EdgeInsets.zero,
-                                              ),
-                                              onSubmitted: (val) =>
-                                                  _sendReply(val),
-                                            ),
-                                          ),
-                                          IconButton(
-                                            onPressed: () => _sendReply(
-                                              _replyController.text,
-                                            ),
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(),
-                                            icon: Icon(
-                                              Icons.send,
-                                              color: Colors.green[800],
-                                              size: 20,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
                               const Divider(height: 1),
                             ],
                           );
@@ -499,6 +376,171 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildCommentItem(QueryDocumentSnapshot doc, {required bool isReply}) {
+    final cData = doc.data() as Map<String, dynamic>;
+    final commentId = doc.id;
+    final bool isMe = cData['uid'] == widget.currentUser.uid;
+    final String senderName = cData['username'] ?? 'User';
+    final bool isReplyingToThis = _activeCommentId == commentId;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListTile(
+          dense: true,
+          leading: CircleAvatar(
+            backgroundColor: isMe ? Colors.green[100] : Colors.blue[100],
+            radius: 14,
+            backgroundImage:
+                (cData['avatar'] != null && cData['avatar'].isNotEmpty)
+                ? CachedNetworkImageProvider(cData['avatar'])
+                : null,
+            child: (cData['avatar'] == null || cData['avatar'].isEmpty)
+                ? Icon(
+                    isMe ? Icons.store : Icons.person,
+                    size: 16,
+                    color: isMe ? Colors.green[800] : Colors.blue[800],
+                  )
+                : null,
+          ),
+          title: Text(
+            senderName,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: isMe ? Colors.green[900] : Colors.black87,
+            ),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (cData['tagged_user'] != null)
+                Text(
+                  "@${cData['tagged_user']}",
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.blue[800],
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              Text(cData['text'] ?? ''),
+            ],
+          ),
+          trailing: !isMe
+              ? TextButton(
+                  onPressed: () => _activateReplyBox(
+                    commentId,
+                    cData['uid'] ?? '',
+                    senderName,
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text(
+                    "Reply",
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                )
+              : TextButton(
+                  onPressed: () => _deleteComment(commentId),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text(
+                    "Delete",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red,
+                    ),
+                  ),
+                ),
+        ),
+        if (isReplyingToThis)
+          Container(
+            margin: const EdgeInsets.only(left: 20, right: 10, bottom: 10),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.green.shade200),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 5,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Replying to @$_taggedUserName",
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.green[800],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: _cancelReply,
+                      child: const Icon(
+                        Icons.close,
+                        size: 16,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _replyController,
+                        focusNode: _replyFocusNode,
+                        decoration: const InputDecoration(
+                          hintText: "Type your reply...",
+                          isDense: true,
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        onSubmitted: (val) => _sendReply(val),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => _sendReply(_replyController.text),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      icon: Icon(
+                        Icons.send,
+                        color: Colors.green[800],
+                        size: 20,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class CommentSheet extends StatefulWidget {
   final String postId;
@@ -225,7 +226,7 @@ class _CommentSheetState extends State<CommentSheet> {
                   );
                 }
 
-                // --- 1. Filter Top-Level Comments ---
+                // 🟢 FIX: Separate Roots and Replies for Indentation
                 final topLevelComments = allDocs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
                   return data['replyToId'] == null;
@@ -238,7 +239,7 @@ class _CommentSheetState extends State<CommentSheet> {
                     final parentDoc = topLevelComments[index];
                     final parentId = parentDoc.id;
 
-                    // --- 2. Find Replies for this specific parent ---
+                    // 🟢 Find Replies
                     final replies = allDocs.where((doc) {
                       final data = doc.data() as Map<String, dynamic>;
                       return data['replyToId'] == parentId;
@@ -247,19 +248,16 @@ class _CommentSheetState extends State<CommentSheet> {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // RENDER PARENT
                         _buildCommentItem(
                           parentDoc,
                           isReply: false,
                           rootId: parentId,
                         ),
 
-                        // RENDER REPLIES (Indented)
+                        // 🟢 Render Indented Replies
                         if (replies.isNotEmpty)
                           Padding(
-                            padding: const EdgeInsets.only(
-                              left: 48.0,
-                            ), // Indent replies
+                            padding: const EdgeInsets.only(left: 48.0),
                             child: Column(
                               children: replies
                                   .map(
@@ -357,10 +355,14 @@ class _CommentSheetState extends State<CommentSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                radius: isReply ? 14 : 18, // Smaller avatar for replies
-                backgroundImage: NetworkImage(
-                  data['avatar'] ?? "https://via.placeholder.com/150",
-                ),
+                radius: isReply ? 14 : 18,
+                backgroundImage:
+                    (data['avatar'] != null && data['avatar'].isNotEmpty)
+                    ? CachedNetworkImageProvider(data['avatar'])
+                    : null,
+                child: (data['avatar'] == null || data['avatar'].isEmpty)
+                    ? Icon(Icons.person, size: 16, color: Colors.blue[800])
+                    : null,
               ),
               const SizedBox(width: 10),
               Expanded(

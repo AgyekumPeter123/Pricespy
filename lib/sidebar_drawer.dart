@@ -18,7 +18,7 @@ import 'my_post_comments.dart';
 import 'inbox_page.dart';
 import 'chat_list_page.dart';
 import 'watchlist_page.dart';
-import 'location_settings.dart'; // Correct import name
+import 'location_settings.dart';
 import 'disclaimer_page.dart';
 import 'admin_dashboard.dart';
 
@@ -142,6 +142,54 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
     }
   }
 
+  // --- NEW: View Profile Picture Large (FIXED SIZE) ---
+  void _viewProfilePicture() {
+    Navigator.pop(context); // Close Drawer
+    if (user?.photoURL == null || user!.photoURL!.isEmpty) return;
+
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.black, // Dark background
+        insetPadding: EdgeInsets.zero, // Remove padding to use full screen
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Interactive Viewer for Zooming
+            InteractiveViewer(
+              panEnabled: true,
+              minScale: 0.5,
+              maxScale: 4,
+              child: Container(
+                width: double.infinity,
+                height: double.infinity,
+                alignment: Alignment.center,
+                child: CachedNetworkImage(
+                  imageUrl: user?.photoURL ?? "",
+                  placeholder: (context, url) =>
+                      const CircularProgressIndicator(color: Colors.white),
+                  errorWidget: (context, url, error) =>
+                      const Icon(Icons.person, size: 80, color: Colors.grey),
+                  fit: BoxFit.contain, // Ensures full image visibility
+                ),
+              ),
+            ),
+            // Close Button
+            Positioned(
+              top: 40,
+              right: 20,
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                style: IconButton.styleFrom(backgroundColor: Colors.black26),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildBadge(int count) {
     if (count == 0) return const SizedBox.shrink();
     return Container(
@@ -186,7 +234,6 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
         Navigator.pop(context); // Close Drawer
         if (!isCurrent) {
           if (targetPage is HomePage) {
-            // If going to Home, clear stack
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (context) => const HomePage()),
               (route) => false,
@@ -218,19 +265,26 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
             accountEmail: Text(user?.email ?? ""),
             currentAccountPicture: Stack(
               children: [
-                CircleAvatar(
-                  radius: 36,
-                  backgroundColor: Colors.white,
-                  child: ClipOval(
-                    child: CachedNetworkImage(
-                      imageUrl: user?.photoURL ?? "",
-                      width: 72,
-                      height: 72,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) =>
-                          const CircularProgressIndicator(),
-                      errorWidget: (context, url, error) =>
-                          Icon(Icons.person, size: 40, color: Colors.grey[400]),
+                GestureDetector(
+                  // NEW: Tap to view large
+                  onTap: _viewProfilePicture,
+                  child: CircleAvatar(
+                    radius: 36,
+                    backgroundColor: Colors.white,
+                    child: ClipOval(
+                      child: CachedNetworkImage(
+                        imageUrl: user?.photoURL ?? "",
+                        width: 72,
+                        height: 72,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) =>
+                            const CircularProgressIndicator(),
+                        errorWidget: (context, url, error) => Icon(
+                          Icons.person,
+                          size: 40,
+                          color: Colors.grey[400],
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -276,18 +330,23 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                   targetPage: const WatchlistPage(),
                 ),
 
-                // INBOX with Badge
+                // INBOX with Independent Badge
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('users')
                       .doc(user?.uid)
                       .collection('notifications')
-                      .where('isRead', isEqualTo: false)
+                      .where('read', isEqualTo: false)
                       .snapshots(),
                   builder: (context, snapshot) {
-                    int count = snapshot.hasData
-                        ? snapshot.data!.docs.length
-                        : 0;
+                    int count = 0;
+                    if (snapshot.hasData) {
+                      // Filter OUT replies (so it only counts system messages/alerts)
+                      count = snapshot.data!.docs.where((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        return data['type'] != 'reply';
+                      }).length;
+                    }
                     return _buildDrawerItem(
                       context,
                       icon: Icons.inbox,
@@ -331,12 +390,34 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                   title: "My Posts",
                   targetPage: const MyPostsPage(),
                 ),
-                _buildDrawerItem(
-                  context,
-                  icon: Icons.forum,
-                  title: "Comments on My Items",
-                  targetPage: const MyPostCommentsPage(),
+
+                // COMMENTS ON MY ITEMS with Independent Badge
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user?.uid)
+                      .collection('notifications')
+                      .where('read', isEqualTo: false)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    int count = 0;
+                    if (snapshot.hasData) {
+                      // Filter FOR replies specifically
+                      count = snapshot.data!.docs.where((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        return data['type'] == 'reply';
+                      }).length;
+                    }
+                    return _buildDrawerItem(
+                      context,
+                      icon: Icons.forum,
+                      title: "Comments on My Items",
+                      targetPage: const MyPostCommentsPage(),
+                      trailing: _buildBadge(count),
+                    );
+                  },
                 ),
+
                 _buildDrawerItem(
                   context,
                   icon: Icons.bookmark,

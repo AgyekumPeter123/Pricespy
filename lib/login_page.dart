@@ -69,9 +69,20 @@ class _LoginPageState extends State<LoginPage> {
         MaterialPageRoute(builder: (_) => const SplashScreen()),
       );
     } on FirebaseAuthException catch (e) {
-      _showErrorSnackBar(e.message ?? "Login Failed");
+      // Cleaner error messages for standard auth
+      String message = "Login Failed";
+      if (e.code == 'user-not-found') {
+        message = "No user found for that email.";
+      } else if (e.code == 'wrong-password') {
+        message = "Wrong password provided.";
+      } else if (e.code == 'invalid-email') {
+        message = "The email address is invalid.";
+      } else {
+        message = e.message ?? "Login Failed";
+      }
+      _showErrorSnackBar(message);
     } catch (e) {
-      _showErrorSnackBar("Login failed: $e");
+      _showErrorSnackBar("An unexpected error occurred. Please try again.");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -102,8 +113,6 @@ class _LoginPageState extends State<LoginPage> {
 
   // --- 3. GOOGLE SIGN-IN ---
   Future<void> _signInWithGoogle() async {
-    // FIX: Removed the unused 'email' variable here to resolve the warning.
-
     final connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult == ConnectivityResult.none) {
       _showErrorSnackBar("No internet connection. Please try again.");
@@ -113,26 +122,36 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
+      // Initialize Google Sign In
       await GoogleSignIn.instance.initialize(
         serverClientId:
             "464751734266-6a0kfeaqd7tv4jbabpegqru6t4fji0gc.apps.googleusercontent.com",
       );
 
+      // 1. Trigger the authentication flow
       final GoogleSignInAccount? googleUser = await GoogleSignIn.instance
           .authenticate();
-      if (googleUser == null) return;
 
+      // FIX: Handle manual cancellation (User closed the window)
+      if (googleUser == null) {
+        _showErrorSnackBar("Sign-in cancelled", isWarning: true);
+        return;
+      }
+
+      // 2. Obtain the auth details from the request
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
       );
 
+      // 3. Sign in to Firebase
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithCredential(credential);
       final User? user = userCredential.user;
       if (user == null) return;
 
+      // 4. Firestore User Check
       final userDocRef = FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid);
@@ -170,7 +189,21 @@ class _LoginPageState extends State<LoginPage> {
         MaterialPageRoute(builder: (_) => const SplashScreen()),
       );
     } catch (e) {
-      _showErrorSnackBar("Google Sign-In failed: $e");
+      // FIX: Catch generic errors and check if it was a cancellation exception
+      final String errorMsg = e.toString().toLowerCase();
+
+      // Check for common cancellation keywords or error codes (12501 is Android sign-in cancelled)
+      if (errorMsg.contains('canceled') ||
+          errorMsg.contains('cancelled') ||
+          errorMsg.contains('12501')) {
+        _showErrorSnackBar("Sign-in cancelled", isWarning: true);
+      } else {
+        // Only show actual technical errors here, not cancellation text
+        _showErrorSnackBar("Google Sign-In failed. Please try again.");
+        debugPrint(
+          "Google Sign-In Error: $e",
+        ); // Keep raw error in debug console
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -182,6 +215,8 @@ class _LoginPageState extends State<LoginPage> {
       SnackBar(
         content: Text(message),
         backgroundColor: isWarning ? Colors.orange : Colors.red,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -305,10 +340,10 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
                   onPressed: _isLoading ? null : _signInWithGoogle,
-                  icon: const Icon(
-                    Icons.g_mobiledata,
-                    size: 30,
-                    color: Colors.red,
+                  icon: Image.asset(
+                    'assets/files/google_logo.png',
+                    height: 24,
+                    width: 24,
                   ),
                   label: const Text(
                     "Continue with Google",

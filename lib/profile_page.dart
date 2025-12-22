@@ -64,7 +64,6 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   // --- 2. IMAGE PICKING & CROPPING ---
-  // --- 2. IMAGE PICKING & CROPPING ---
   Future<void> _pickAndCropImage(ImageSource source) async {
     final picker = ImagePicker();
     final XFile? pickedFile = await picker.pickImage(
@@ -210,6 +209,56 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  // --- NEW: View Large Profile Picture (FIXED SIZE) ---
+  void _viewProfilePicture() {
+    if (_currentPhotoUrl == null || _currentPhotoUrl!.isEmpty) return;
+
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.black, // Dark background
+        insetPadding: EdgeInsets.zero, // Remove padding to use full screen
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Interactive Viewer for Zooming
+            InteractiveViewer(
+              panEnabled: true,
+              minScale: 0.5,
+              maxScale: 4,
+              child: Container(
+                width: double.infinity,
+                height: double.infinity,
+                alignment: Alignment.center,
+                child: CachedNetworkImage(
+                  imageUrl: _currentPhotoUrl!,
+                  placeholder: (context, url) =>
+                      const CircularProgressIndicator(color: Colors.white),
+                  errorWidget: (context, url, error) => const Icon(
+                    Icons.broken_image,
+                    size: 80,
+                    color: Colors.white,
+                  ),
+                  fit: BoxFit.contain, // Ensures the whole image is visible
+                ),
+              ),
+            ),
+            // Close Button
+            Positioned(
+              top: 40,
+              right: 20,
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                style: IconButton.styleFrom(backgroundColor: Colors.black26),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -224,11 +273,12 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(
           children: [
             // --- PROFILE IMAGE SECTION ---
-            GestureDetector(
-              onTap: _showImageSourceActionSheet,
-              child: Stack(
-                children: [
-                  CircleAvatar(
+            Stack(
+              children: [
+                // 1. Tap Avatar to VIEW
+                GestureDetector(
+                  onTap: _viewProfilePicture,
+                  child: CircleAvatar(
                     radius: 60,
                     backgroundColor: Colors.grey[200],
                     backgroundImage: _currentPhotoUrl != null
@@ -238,9 +288,13 @@ class _ProfilePageState extends State<ProfilePage> {
                         ? Icon(Icons.person, size: 60, color: Colors.grey[400])
                         : null,
                   ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
+                ),
+                // 2. Tap Camera Icon to EDIT
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: GestureDetector(
+                    onTap: _showImageSourceActionSheet,
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: const BoxDecoration(
@@ -254,8 +308,8 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
             const SizedBox(height: 30),
 
