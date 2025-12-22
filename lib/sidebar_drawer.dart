@@ -142,14 +142,15 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
     }
   }
 
-  // --- NEW: View Profile Picture Large (FIXED SIZE) ---
+  // --- NEW: View Profile Picture Large (FIXED CLOSE BUTTON) ---
   void _viewProfilePicture() {
     Navigator.pop(context); // Close Drawer
     if (user?.photoURL == null || user!.photoURL!.isEmpty) return;
 
     showDialog(
       context: context,
-      builder: (_) => Dialog(
+      // FIX 1: Use 'dialogContext' to ensure we pop the dialog specifically
+      builder: (dialogContext) => Dialog(
         backgroundColor: Colors.black, // Dark background
         insetPadding: EdgeInsets.zero, // Remove padding to use full screen
         child: Stack(
@@ -176,12 +177,26 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
             ),
             // Close Button
             Positioned(
-              top: 40,
-              right: 20,
-              child: IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                style: IconButton.styleFrom(backgroundColor: Colors.black26),
+              top: 10,
+              right: 10,
+              // FIX 2: SafeArea ensures button isn't hidden by notch/status bar
+              child: SafeArea(
+                // FIX 3: Material wrapper ensures tap events work over the image
+                child: Material(
+                  color: Colors.transparent,
+                  child: IconButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    icon: const Icon(
+                      Icons.close,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor:
+                          Colors.black54, // Slightly darker for visibility
+                    ),
+                  ),
+                ),
               ),
             ),
           ],

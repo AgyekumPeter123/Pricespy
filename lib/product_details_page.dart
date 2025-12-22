@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'add_price_sheet.dart';
 import 'comment_sheet.dart';
 import 'price_trend_chart.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ProductDetailsPage extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -31,7 +32,8 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   late String _uploaderId;
   String? _uploaderEmail; // Fix 2: To store fetched email for admin
   bool _isAdmin = false;
-  final String _adminEmail = "agyekumpeter123@gmail.com"; // Hardcoded Admin Check
+  final String _adminEmail =
+      "agyekumpeter123@gmail.com"; // Hardcoded Admin Check
 
   @override
   void initState() {
@@ -64,12 +66,12 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             .doc(_uploaderId)
             .get()
             .then((snap) {
-          if (snap.exists) {
-            setState(() {
-              _uploaderEmail = snap.data()?['email'];
+              if (snap.exists) {
+                setState(() {
+                  _uploaderEmail = snap.data()?['email'];
+                });
+              }
             });
-          }
-        });
       }
     }
   }
@@ -86,13 +88,14 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           _uploaderId = freshData['uploader_id'] ?? '';
           // If admin, fetch email now that we have ID
           if (_isAdmin && _uploaderId.isNotEmpty) {
-             FirebaseFirestore.instance
-            .collection('users')
-            .doc(_uploaderId)
-            .get()
-            .then((snap) {
-              if(snap.exists) setState(() => _uploaderEmail = snap.data()?['email']);
-            });
+            FirebaseFirestore.instance
+                .collection('users')
+                .doc(_uploaderId)
+                .get()
+                .then((snap) {
+                  if (snap.exists)
+                    setState(() => _uploaderEmail = snap.data()?['email']);
+                });
           }
         });
       }
@@ -109,15 +112,13 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       );
       return;
     }
-    
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => CommentSheet(
-        postId: widget.documentId,
-        postOwnerId: _uploaderId,
-      ),
+      builder: (context) =>
+          CommentSheet(postId: widget.documentId, postOwnerId: _uploaderId),
     );
   }
 
@@ -159,7 +160,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                 'reporterName': user.displayName ?? 'Anonymous',
                 'uploaderId': _uploaderId, // Use local var
                 // Fix 2: Save uploader email in report if possible
-                'uploaderEmail': _uploaderEmail, 
+                'uploaderEmail': _uploaderEmail,
                 'reason': r,
                 'timestamp': FieldValue.serverTimestamp(),
                 'status': 'pending',
@@ -242,7 +243,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   Widget build(BuildContext context) {
     final User? currentUser = FirebaseAuth.instance.currentUser;
     // Fix 1: Use local _uploaderId
-    final bool isOwner = currentUser?.uid == _uploaderId; 
+    final bool isOwner = currentUser?.uid == _uploaderId;
 
     String locationName = widget.data['location_name'] ?? 'Unknown Location';
     String landmark = widget.data['landmark'] ?? '';
@@ -370,7 +371,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       ),
                     ],
                   ),
-                  
+
                   // Fix 2: Admin Insight Panel
                   if (_isAdmin && _uploaderEmail != null)
                     Container(
@@ -383,17 +384,32 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.admin_panel_settings, color: Colors.red),
+                          const Icon(
+                            Icons.admin_panel_settings,
+                            color: Colors.red,
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text("ADMIN INSIGHT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red)),
-                                Text("Uploader Email: $_uploaderEmail", style: const TextStyle(fontWeight: FontWeight.bold)),
+                                const Text(
+                                  "ADMIN INSIGHT",
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                                Text(
+                                  "Uploader Email: $_uploaderEmail",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ],
                             ),
-                          )
+                          ),
                         ],
                       ),
                     ),
@@ -435,7 +451,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                   // PRICE TREND CHART
                   PriceTrendChart(
                     productName: widget.data['product_name'] ?? '',
-                    userPosition: widget.userPosition, 
+                    userPosition: widget.userPosition,
                   ),
 
                   const Divider(),
@@ -558,7 +574,10 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                             }
                             _launchURL("https://wa.me/$cleanPhone");
                           },
-                          icon: const Icon(Icons.message, color: Colors.white),
+                          icon: const Icon(
+                            FontAwesomeIcons.whatsapp,
+                            color: Colors.white,
+                          ),
                           label: const Text(
                             "WhatsApp",
                             style: TextStyle(color: Colors.white),
