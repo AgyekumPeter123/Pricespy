@@ -24,8 +24,16 @@ class _OnboardingPageState extends State<OnboardingPage> {
       "title": "AI Text Detection",
       "desc":
           "Snap a photo and our AI instantly reads the text on the image—like brand names or price tags—to fill in details for you.",
-      "icon": Icons.document_scanner_rounded, // Better icon for text scanning
+      "icon": Icons.document_scanner_rounded,
     },
+    // --- UPDATED SECTION ---
+    {
+      "title": "AI Consultant & Retention",
+      "desc":
+          "Predict churn risks and chat directly with our AI Consultant for personalized business advice to save your customers.",
+      "icon": Icons.psychology_alt,
+    },
+    // -----------------------
     {
       "title": "Private & Secure Chat",
       "desc":

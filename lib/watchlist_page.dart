@@ -67,7 +67,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
           if (mySessionId != _scanSessionId) return "Cancelled";
 
           for (double d in steps) {
-            // Fix 3: Add delay to prevent UI freeze (same logic applied here for consistency)
+            // Fix 3: Add delay to prevent UI freeze (Smoothness)
             await Future.delayed(const Duration(milliseconds: 5));
             String? t = await _getTown(position, d, b);
             if (t != null && t.isNotEmpty && t != _homeTown) {
@@ -140,7 +140,6 @@ class _WatchlistPageState extends State<WatchlistPage> {
     return null;
   }
 
-  // Fix 5: Manual Trigger Logic
   Future<void> _triggerManualSpy(Map<String, dynamic> spyData) async {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -157,7 +156,6 @@ class _WatchlistPageState extends State<WatchlistPage> {
       final double maxPrice = (spyData['max_price'] ?? 999999).toDouble();
       final double radiusMeters = (spyData['radius_km'] ?? 5).toDouble() * 1000;
 
-      // Fix 5: Removed date limit (search all time)
       final matches = await FirebaseFirestore.instance
           .collection('posts')
           .where('search_key', isEqualTo: searchKey)
@@ -216,13 +214,23 @@ class _WatchlistPageState extends State<WatchlistPage> {
     }
   }
 
-  void _showAddAlertSheet() {
-    final keywordController = TextEditingController();
-    final priceController = TextEditingController();
-    double radius = 20.0;
+  // Updated to support Editing
+  void _showAddAlertSheet({Map<String, dynamic>? existingData, String? docId}) {
+    final bool isEditing = existingData != null && docId != null;
+
+    final keywordController = TextEditingController(
+      text: isEditing ? existingData['keyword'] : '',
+    );
+    final priceController = TextEditingController(
+      text: isEditing ? existingData['max_price'].toString() : '',
+    );
+    double radius = isEditing
+        ? (existingData['radius_km'] as num).toDouble()
+        : 20.0;
+
     String contextText = "Tap 'Check Coverage' to scan.";
     bool isFetching = false;
-    bool isSaving = false; // Fix 4: Saving state
+    bool isSaving = false;
 
     // Reset graph for new sheet
     _sectorReach = {'North': 0, 'East': 0, 'South': 0, 'West': 0};
@@ -295,9 +303,9 @@ class _WatchlistPageState extends State<WatchlistPage> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    const Text(
-                      "New Spy Alert",
-                      style: TextStyle(
+                    Text(
+                      isEditing ? "Edit Spy Alert" : "New Spy Alert",
+                      style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                       ),
@@ -434,7 +442,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                     ),
 
                     const SizedBox(height: 30),
-                    // Fix 4: Activate Button with Feedback
+                    // ACTIVATE/UPDATE BUTTON
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -453,38 +461,101 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                   setModalState(() => isSaving = true);
 
                                   try {
+                                    final searchKey = keywordController.text
+                                        .trim()
+                                        .toLowerCase();
+                                    final maxPrice =
+                                        double.tryParse(priceController.text) ??
+                                        999999;
+
+                                    // --- DUPLICATE CHECK START ---
+                                    final duplicateQuery =
+                                        await FirebaseFirestore.instance
+                                            .collection('users')
+                                            .doc(user!.uid)
+                                            .collection('watchlist')
+                                            .where(
+                                              'search_key',
+                                              isEqualTo: searchKey,
+                                            )
+                                            .where(
+                                              'max_price',
+                                              isEqualTo: maxPrice,
+                                            )
+                                            .get();
+
+                                    bool isDuplicate = false;
+                                    if (duplicateQuery.docs.isNotEmpty) {
+                                      // If creating new (isEditing=false), any match is a duplicate
+                                      if (!isEditing) {
+                                        isDuplicate = true;
+                                      } else {
+                                        // If editing, it's only a duplicate if the ID is different
+                                        // (i.e., we are making this alert identical to another one)
+                                        if (duplicateQuery.docs.first.id !=
+                                            docId) {
+                                          isDuplicate = true;
+                                        }
+                                      }
+                                    }
+
+                                    if (isDuplicate) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              "An alert with this name and price already exists!",
+                                            ),
+                                            backgroundColor: Colors.orange,
+                                          ),
+                                        );
+                                      }
+                                      setModalState(() => isSaving = false);
+                                      return; // STOP execution
+                                    }
+                                    // --- DUPLICATE CHECK END ---
+
                                     Position position =
                                         await Geolocator.getCurrentPosition();
-                                    await FirebaseFirestore.instance
-                                        .collection('users')
-                                        .doc(user!.uid)
-                                        .collection('watchlist')
-                                        .add({
-                                          'keyword': keywordController.text
-                                              .trim(),
-                                          'search_key': keywordController.text
-                                              .trim()
-                                              .toLowerCase(),
-                                          'max_price':
-                                              double.tryParse(
-                                                priceController.text,
-                                              ) ??
-                                              999999,
-                                          'radius_km': radius,
-                                          'latitude': position.latitude,
-                                          'longitude': position.longitude,
-                                          'created_at':
-                                              FieldValue.serverTimestamp(),
-                                        });
+
+                                    final alertData = {
+                                      'keyword': keywordController.text.trim(),
+                                      'search_key': searchKey,
+                                      'max_price': maxPrice,
+                                      'radius_km': radius,
+                                      'latitude': position.latitude,
+                                      'longitude': position.longitude,
+                                      'created_at':
+                                          FieldValue.serverTimestamp(),
+                                    };
+
+                                    if (isEditing) {
+                                      await FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(user!.uid)
+                                          .collection('watchlist')
+                                          .doc(docId)
+                                          .update(alertData);
+                                    } else {
+                                      await FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(user!.uid)
+                                          .collection('watchlist')
+                                          .add(alertData);
+                                    }
 
                                     if (mounted) {
                                       Navigator.pop(context);
                                       ScaffoldMessenger.of(
                                         context,
                                       ).showSnackBar(
-                                        const SnackBar(
+                                        SnackBar(
                                           content: Text(
-                                            "Spy Activated! You can now scan for items.",
+                                            isEditing
+                                                ? "Spy Updated!"
+                                                : "Spy Activated! You can now scan for items.",
                                           ),
                                           backgroundColor: Colors.green,
                                         ),
@@ -492,6 +563,16 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                     }
                                   } catch (e) {
                                     setModalState(() => isSaving = false);
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text("Error: $e"),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                    }
                                   }
                                 }
                               },
@@ -504,9 +585,9 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                   strokeWidth: 2,
                                 ),
                               )
-                            : const Text(
-                                "ACTIVATE SPY",
-                                style: TextStyle(
+                            : Text(
+                                isEditing ? "UPDATE SPY" : "ACTIVATE SPY",
+                                style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -542,7 +623,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddAlertSheet,
+        onPressed: () => _showAddAlertSheet(),
         backgroundColor: Colors.green[800],
         icon: const Icon(Icons.add_alert, color: Colors.white),
         label: const Text("New Alert", style: TextStyle(color: Colors.white)),
@@ -599,7 +680,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                     "Max: ₵${data['max_price']} • ${data['radius_km']} km radius",
                     style: const TextStyle(color: Colors.grey),
                   ),
-                  // Fix 5: Icons for Delete and Search
+                  // Fix 5: Icons for Delete, Edit and Search
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -607,10 +688,18 @@ class _WatchlistPageState extends State<WatchlistPage> {
                         icon: const Icon(
                           Icons.youtube_searched_for,
                           color: Colors.blue,
-                          size: 28,
+                          size: 26,
                         ),
                         tooltip: "Scan Now",
                         onPressed: () => _triggerManualSpy(data),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.grey),
+                        tooltip: "Edit",
+                        onPressed: () => _showAddAlertSheet(
+                          existingData: data,
+                          docId: docId,
+                        ),
                       ),
                       IconButton(
                         icon: const Icon(

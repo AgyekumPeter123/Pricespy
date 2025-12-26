@@ -21,6 +21,7 @@ import 'watchlist_page.dart';
 import 'location_settings.dart';
 import 'disclaimer_page.dart';
 import 'admin_dashboard.dart';
+import 'churn_prediction_page.dart';
 
 class SidebarDrawer extends StatefulWidget {
   final bool isHome;
@@ -460,6 +461,13 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                   icon: Icons.security,
                   title: "Safety & Disclaimer",
                   targetPage: const DisclaimerPage(),
+                ),
+
+                _buildDrawerItem(
+                  context,
+                  icon: Icons.analytics,
+                  title: "Churn Prediction AI",
+                  targetPage: const ChurnPredictionPage(),
                 ),
 
                 // ADMIN PANEL (Conditional)

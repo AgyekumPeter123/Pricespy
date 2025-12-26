@@ -61,7 +61,7 @@ class DisclaimerPage extends StatelessWidget {
               title: "Smart Radar Privacy",
               content:
                   "Our 12-point GPS scan shows you items within your chosen radius. We do not share your exact coordinates with other users.",
-              icon: Icons.radar, // Aligned with your app features
+              icon: Icons.radar,
               color: Colors.blue,
             ),
 
@@ -73,6 +73,16 @@ class DisclaimerPage extends StatelessWidget {
               color: Colors.purple,
             ),
 
+            // --- UPDATED SECTION FOR AI CONSULTANT ---
+            _buildSafetySection(
+              title: "AI Advice & Predictions",
+              content:
+                  "The AI Consultant and Churn Predictions are based on probability models. They are estimates, not guarantees. PriceSpy is not liable for any business decisions or financial losses resulting from AI-generated advice.",
+              icon: Icons.psychology_alt,
+              color: Colors.indigo,
+            ),
+
+            // -----------------------------------------
             _buildSafetySection(
               title: "Verified by Camera",
               content:
@@ -93,7 +103,7 @@ class DisclaimerPage extends StatelessWidget {
               title: "Community Watch",
               content:
                   "If you spot a scam or fake price, report it immediately. Our admin team investigates every report to keep the community safe.",
-              icon: Icons.gavel_rounded, // Matches your admin features
+              icon: Icons.gavel_rounded,
               color: Colors.teal,
             ),
 
@@ -115,12 +125,12 @@ class DisclaimerPage extends StatelessWidget {
                     size: 30,
                   ),
                   const SizedBox(width: 15),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       "If a deal sounds too good to be true, it probably is. Stay vigilant!",
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFB71C1C),
+                        color: const Color(0xFFB71C1C),
                         height: 1.4,
                       ),
                     ),
@@ -164,7 +174,8 @@ class DisclaimerPage extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              // 🟢 FIX: Replaced withOpacity with withValues
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 28),
