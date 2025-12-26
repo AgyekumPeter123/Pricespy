@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AiConsultantPage extends StatefulWidget {
   final Map<String, dynamic> predictionResult;
@@ -21,7 +22,7 @@ class AiConsultantPage extends StatefulWidget {
 }
 
 class _AiConsultantPageState extends State<AiConsultantPage> {
-  static const String _apiKey = 'AIzaSyBIT2-85NooggkUlFqYomUVz4ygtwuHQVM';
+  static String get _apiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
   static const String _baseUrl =
       'https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent';
 

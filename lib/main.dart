@@ -2,12 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart'; 
 import 'splash_screen.dart';
 import 'onboarding_page.dart';
-import 'lifecycle_manager.dart'; // 🟢 NEW IMPORT
+import 'lifecycle_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 🟢 2. LOAD SECRETS FIRST
+  try {
+    await dotenv.load(fileName: "KEYS.env");
+    print("✅ Secrets loaded");
+  } catch (e) {
+    print("❌ Failed to load KEYS.env: $e");
+  }
 
   try {
     await Firebase.initializeApp();
@@ -27,7 +36,6 @@ void main() async {
 
   runApp(
     LifeCycleManager(
-      // 🟢 WRAP THE ENTIRE APP HERE
       child: App(showOnboarding: !seenOnboarding),
     ),
   );

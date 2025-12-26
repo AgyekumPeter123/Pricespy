@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'sidebar_drawer.dart';
 import 'services/churn_service.dart';
 import 'ai_consultant_sheet.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ChurnPredictionPage extends StatefulWidget {
   const ChurnPredictionPage({super.key});

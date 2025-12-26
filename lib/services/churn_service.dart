@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ChurnService {
   Interpreter? _interpreter;
@@ -11,7 +12,7 @@ class ChurnService {
   double _cachedExchangeRate = 15.0;
 
   // ✅ FIXED: Using your API Key
-  static const String _apiKey = 'AIzaSyBIT2-85NooggkUlFqYomUVz4ygtwuHQVM';
+  static String get _apiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
 
   // ✅ UPDATED: Switched to 'gemini-2.5-flash' (Late 2025 Standard)
   static const String _baseUrl =
