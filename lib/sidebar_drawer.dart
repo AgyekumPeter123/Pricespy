@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 // --- PAGE IMPORTS ---
 import 'login_page.dart';
@@ -49,29 +50,36 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
 
   // --- IMAGE UPLOAD LOGIC ---
   void _showImageSourceActionSheet(BuildContext context) {
-    Navigator.pop(context); // Close Drawer first
+    Navigator.pop(context); // Close Drawer
     showModalBottomSheet(
       context: context,
-      builder: (context) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_camera),
-              title: const Text('Take a photo'),
-              onTap: () {
-                Navigator.of(context).pop();
-                _pickAndCropImage(ImageSource.camera);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('Choose from gallery'),
-              onTap: () {
-                Navigator.of(context).pop();
-                _pickAndCropImage(ImageSource.gallery);
-              },
-            ),
-          ],
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_camera, color: Colors.blue),
+                title: const Text('Take a photo'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _pickAndCropImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Colors.purple),
+                title: const Text('Choose from gallery'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _pickAndCropImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -111,7 +119,6 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
     try {
       final File file = File(croppedFile.path);
       final String uid = user!.uid;
-
       final ref = FirebaseStorage.instance
           .ref()
           .child('user_profiles')
@@ -121,83 +128,59 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
       final String downloadUrl = await ref.getDownloadURL();
 
       await user!.updatePhotoURL(downloadUrl);
-
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'photoURL': downloadUrl,
       }, SetOptions(merge: true));
 
-      setState(() {}); // Refresh UI to show new image
+      setState(() {});
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Profile picture updated!")),
+          const SnackBar(
+            content: Text("Profile picture updated!"),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
       debugPrint("Error uploading image: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Failed to upload image.")),
+          const SnackBar(
+            content: Text("Failed to upload image."),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
   }
 
-  // --- NEW: View Profile Picture Large (FIXED CLOSE BUTTON) ---
   void _viewProfilePicture() {
-    Navigator.pop(context); // Close Drawer
+    Navigator.pop(context);
     if (user?.photoURL == null || user!.photoURL!.isEmpty) return;
-
     showDialog(
       context: context,
-      // FIX 1: Use 'dialogContext' to ensure we pop the dialog specifically
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.black, // Dark background
-        insetPadding: EdgeInsets.zero, // Remove padding to use full screen
+      builder: (context) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // Interactive Viewer for Zooming
             InteractiveViewer(
-              panEnabled: true,
-              minScale: 0.5,
-              maxScale: 4,
-              child: Container(
-                width: double.infinity,
-                height: double.infinity,
-                alignment: Alignment.center,
-                child: CachedNetworkImage(
-                  imageUrl: user?.photoURL ?? "",
-                  placeholder: (context, url) =>
-                      const CircularProgressIndicator(color: Colors.white),
-                  errorWidget: (context, url, error) =>
-                      const Icon(Icons.person, size: 80, color: Colors.grey),
-                  fit: BoxFit.contain, // Ensures full image visibility
-                ),
+              child: CachedNetworkImage(
+                imageUrl: user!.photoURL!,
+                placeholder: (context, url) =>
+                    const CircularProgressIndicator(color: Colors.white),
+                errorWidget: (context, url, error) => const Icon(Icons.error),
+                fit: BoxFit.contain,
               ),
             ),
-            // Close Button
             Positioned(
-              top: 10,
-              right: 10,
-              // FIX 2: SafeArea ensures button isn't hidden by notch/status bar
-              child: SafeArea(
-                // FIX 3: Material wrapper ensures tap events work over the image
-                child: Material(
-                  color: Colors.transparent,
-                  child: IconButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    icon: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 30,
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor:
-                          Colors.black54, // Slightly darker for visibility
-                    ),
-                  ),
-                ),
+              top: 40,
+              right: 20,
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
               ),
             ),
           ],
@@ -206,147 +189,303 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
     );
   }
 
+  // --- UI HELPERS ---
   Widget _buildBadge(int count) {
     if (count == 0) return const SizedBox.shrink();
     return Container(
-      padding: const EdgeInsets.all(6),
-      decoration: const BoxDecoration(
-        color: Colors.red,
-        shape: BoxShape.circle,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.redAccent,
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         count > 99 ? '99+' : count.toString(),
         style: const TextStyle(
           color: Colors.white,
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: FontWeight.bold,
         ),
       ),
     );
   }
 
-  // Helper to build drawer items cleanly
-  Widget _buildDrawerItem(
-    BuildContext context, {
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: Colors.grey[600],
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDrawerItem({
     required IconData icon,
     required String title,
     required Widget targetPage,
+    required BuildContext context,
     bool isCurrent = false,
     Widget? trailing,
     Color? iconColor,
+    VoidCallback? onTap,
   }) {
-    return ListTile(
-      leading: Icon(icon, color: iconColor ?? Colors.green[800]),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-          color: isCurrent ? Colors.green[800] : Colors.black87,
-        ),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        color: isCurrent ? Colors.green.withOpacity(0.1) : Colors.transparent,
       ),
-      trailing: trailing,
-      tileColor: isCurrent ? Colors.green[50] : null,
-      onTap: () {
-        Navigator.pop(context); // Close Drawer
-        if (!isCurrent) {
-          if (targetPage is HomePage) {
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (context) => const HomePage()),
-              (route) => false,
-            );
-          } else {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => targetPage),
-            );
-          }
-        }
-      },
+      child: ListTile(
+        leading: Icon(
+          icon,
+          color:
+              iconColor ?? (isCurrent ? Colors.green[800] : Colors.grey[700]),
+        ),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
+            color: isCurrent ? Colors.green[800] : Colors.black87,
+          ),
+        ),
+        trailing: trailing,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        onTap:
+            onTap ??
+            () {
+              Navigator.pop(context);
+              if (!isCurrent) {
+                if (targetPage is HomePage) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => const HomePage()),
+                    (route) => false,
+                  );
+                } else {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => targetPage),
+                  );
+                }
+              }
+            },
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Drawer(
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topRight: Radius.circular(20),
+          bottomRight: Radius.circular(20),
+        ),
+      ),
       backgroundColor: Colors.white,
       child: Column(
         children: [
-          // 1. HEADER
-          UserAccountsDrawerHeader(
-            decoration: BoxDecoration(color: Colors.green[800]),
-            accountName: Text(
-              user?.displayName ?? "User",
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            accountEmail: Text(user?.email ?? ""),
-            currentAccountPicture: Stack(
-              children: [
-                GestureDetector(
-                  // NEW: Tap to view large
-                  onTap: _viewProfilePicture,
-                  child: CircleAvatar(
-                    radius: 36,
-                    backgroundColor: Colors.white,
-                    child: ClipOval(
-                      child: CachedNetworkImage(
-                        imageUrl: user?.photoURL ?? "",
-                        width: 72,
-                        height: 72,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) =>
-                            const CircularProgressIndicator(),
-                        errorWidget: (context, url, error) => Icon(
-                          Icons.person,
-                          size: 40,
-                          color: Colors.grey[400],
+          // 🔴 1. REAL-TIME DATA HEADER
+          StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(user?.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              // --- 📊 CALCULATE SCORE ---
+              double profileScore = 0;
+              String displayName = user?.displayName ?? "Guest User";
+              String? photoURL = user?.photoURL;
+
+              if (snapshot.hasData && snapshot.data!.exists) {
+                final data = snapshot.data!.data() as Map<String, dynamic>;
+
+                // 1. Name Check (34%)
+                if ((data['displayName'] ?? "").toString().isNotEmpty) {
+                  profileScore += 34;
+                  displayName =
+                      data['displayName']; // Use Firestore name if available
+                } else if ((user?.displayName ?? "").isNotEmpty) {
+                  profileScore += 34;
+                }
+
+                // 2. Call Number Check (33%)
+                if ((data['call_number'] ?? "").toString().isNotEmpty) {
+                  profileScore += 33;
+                }
+
+                // 3. WhatsApp Number Check (33%)
+                if ((data['whatsapp_number'] ?? "").toString().isNotEmpty) {
+                  profileScore += 33;
+                }
+
+                // Use Firestore photo if newer
+                if (data['photoUrl'] != null) photoURL = data['photoUrl'];
+              }
+
+              return Container(
+                padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.green[900]!, Colors.green[700]!],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        // 📊 THE CHART: Trust Score Ring
+                        Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            SizedBox(
+                              width: 80,
+                              height: 80,
+                              child: PieChart(
+                                PieChartData(
+                                  sectionsSpace: 0,
+                                  centerSpaceRadius: 36,
+                                  startDegreeOffset: -90,
+                                  sections: [
+                                    PieChartSectionData(
+                                      color: Colors.white,
+                                      value: profileScore,
+                                      radius: 4,
+                                      showTitle: false,
+                                    ),
+                                    PieChartSectionData(
+                                      color: Colors.white.withOpacity(0.3),
+                                      value: 100 - profileScore,
+                                      radius: 4,
+                                      showTitle: false,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: _viewProfilePicture,
+                              child: CircleAvatar(
+                                radius: 32,
+                                backgroundColor: Colors.white,
+                                backgroundImage: photoURL != null
+                                    ? CachedNetworkImageProvider(photoURL)
+                                    : null,
+                                child: photoURL == null
+                                    ? Icon(
+                                        Icons.person,
+                                        size: 35,
+                                        color: Colors.grey[400],
+                                      )
+                                    : null,
+                              ),
+                            ),
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: GestureDetector(
+                                onTap: () =>
+                                    _showImageSourceActionSheet(context),
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.camera_alt,
+                                    size: 14,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
+                        const SizedBox(width: 15),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                displayName,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                user?.email ?? "",
+                                style: TextStyle(
+                                  color: Colors.green[100],
+                                  fontSize: 12,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 8),
+                              // Score Text
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  "Completeness: ${profileScore.toInt()}%",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
+                  ],
                 ),
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: InkWell(
-                    onTap: () => _showImageSourceActionSheet(context),
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.camera_alt,
-                        size: 16,
-                        color: Colors.green[800],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           ),
 
-          // 2. NAVIGATION ITEMS
+          // 2. SCROLLABLE MENU (Unchanged)
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
+                _buildSectionHeader("MARKETPLACE"),
                 _buildDrawerItem(
-                  context,
+                  context: context,
                   icon: Icons.radar,
-                  title: "Spy Feed (Home)",
+                  title: "Spy Feed",
                   targetPage: const HomePage(),
                   isCurrent: widget.isHome,
                 ),
                 _buildDrawerItem(
-                  context,
-                  icon: Icons.notifications_active,
-                  title: "My Spy Alerts",
+                  context: context,
+                  icon: Icons.notifications_active_outlined,
+                  title: "My Alerts",
                   targetPage: const WatchlistPage(),
                 ),
 
-                // INBOX with Independent Badge
+                _buildSectionHeader("COMMUNICATION"),
+                // Inbox with Badge
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('users')
@@ -357,23 +496,20 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                   builder: (context, snapshot) {
                     int count = 0;
                     if (snapshot.hasData) {
-                      // Filter OUT replies (so it only counts system messages/alerts)
-                      count = snapshot.data!.docs.where((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        return data['type'] != 'reply';
-                      }).length;
+                      count = snapshot.data!.docs
+                          .where((doc) => doc['type'] != 'reply')
+                          .length;
                     }
                     return _buildDrawerItem(
-                      context,
-                      icon: Icons.inbox,
+                      context: context,
+                      icon: Icons.inbox_outlined,
                       title: "Inbox",
                       targetPage: const InboxPage(),
                       trailing: _buildBadge(count),
                     );
                   },
                 ),
-
-                // PRIVATE CHATS with Badge
+                // Chats with Badge
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('chats')
@@ -389,8 +525,8 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                       }
                     }
                     return _buildDrawerItem(
-                      context,
-                      icon: Icons.chat,
+                      context: context,
+                      icon: Icons.chat_bubble_outline,
                       title: "Private Chats",
                       targetPage: const ChatListPage(),
                       trailing: _buildBadge(unreadTotal),
@@ -398,98 +534,44 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                   },
                 ),
 
-                const Divider(),
-
+                _buildSectionHeader("ACCOUNT & TOOLS"),
                 _buildDrawerItem(
-                  context,
-                  icon: Icons.article,
-                  title: "My Posts",
+                  context: context,
+                  icon: Icons.article_outlined,
+                  title: "My Listings",
                   targetPage: const MyPostsPage(),
                 ),
-
-                // COMMENTS ON MY ITEMS with Independent Badge
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(user?.uid)
-                      .collection('notifications')
-                      .where('read', isEqualTo: false)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    int count = 0;
-                    if (snapshot.hasData) {
-                      // Filter FOR replies specifically
-                      count = snapshot.data!.docs.where((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        return data['type'] == 'reply';
-                      }).length;
-                    }
-                    return _buildDrawerItem(
-                      context,
-                      icon: Icons.forum,
-                      title: "Comments on My Items",
-                      targetPage: const MyPostCommentsPage(),
-                      trailing: _buildBadge(count),
-                    );
-                  },
-                ),
-
                 _buildDrawerItem(
-                  context,
-                  icon: Icons.bookmark,
-                  title: "Saved Posts",
-                  targetPage: const SavedPostsPage(),
-                ),
-                _buildDrawerItem(
-                  context,
-                  icon: Icons.person,
-                  title: "Edit Profile",
+                  context: context,
+                  icon: Icons.person_outline,
+                  title: "Profile Settings",
                   targetPage: const ProfilePage(),
                 ),
-
-                const Divider(),
-
-                // SETTINGS & SAFETY
                 _buildDrawerItem(
-                  context,
-                  icon: Icons.tune,
-                  title: "Discovery Settings",
-                  targetPage: const LocationSettingsPage(),
-                ),
-                _buildDrawerItem(
-                  context,
-                  icon: Icons.security,
-                  title: "Safety & Disclaimer",
-                  targetPage: const DisclaimerPage(),
-                ),
-
-                _buildDrawerItem(
-                  context,
-                  icon: Icons.analytics,
-                  title: "Churn Prediction AI",
+                  context: context,
+                  icon: Icons.analytics_outlined,
+                  title: "Churn Predictor AI",
                   targetPage: const ChurnPredictionPage(),
                 ),
 
-                // ADMIN PANEL (Conditional)
                 if (user?.email == _adminEmail) ...[
-                  const Divider(color: Colors.red),
+                  _buildSectionHeader("ADMINISTRATION"),
                   _buildDrawerItem(
-                    context,
+                    context: context,
                     icon: Icons.admin_panel_settings,
                     title: "Admin Console",
                     targetPage: const AdminDashboard(),
-                    iconColor: Colors.red,
+                    iconColor: Colors.redAccent,
                   ),
                 ],
 
-                // LOGOUT
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.logout, color: Colors.red),
-                  title: const Text(
-                    "Logout",
-                    style: TextStyle(color: Colors.red),
-                  ),
+                const Divider(height: 30),
+                _buildDrawerItem(
+                  context: context,
+                  icon: Icons.logout,
+                  title: "Logout",
+                  targetPage: const LoginPage(), // Dummy
+                  iconColor: Colors.red,
                   onTap: () => _logout(context),
                 ),
                 const SizedBox(height: 20),

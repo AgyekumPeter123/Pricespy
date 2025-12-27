@@ -62,7 +62,6 @@ class ChatListPage extends StatelessWidget {
   Future<void> _deleteChat(BuildContext context, String chatId) async {
     try {
       // Note: This deletes the entire chat document.
-      // For personal clearing, use the clearChat logic in ChatService instead.
       await FirebaseFirestore.instance.collection('chats').doc(chatId).delete();
     } catch (e) {
       if (context.mounted) {
@@ -134,22 +133,30 @@ class ChatListPage extends StatelessWidget {
         title: const Text("Private Chats"),
         backgroundColor: Colors.green[800],
         foregroundColor: Colors.white,
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.sort),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
       ),
       drawer: const SidebarDrawer(),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('chats')
-            // FIX: Only show chats that haven't been cleared via visibility logic
             .where('visibleFor', arrayContains: myUid)
             .orderBy('lastMessageTime', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError)
+          if (snapshot.hasError) {
             return Center(child: Text("Error: ${snapshot.error}"));
-          if (snapshot.connectionState == ConnectionState.waiting)
+          }
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return const Center(child: Text("No chats yet."));
+          }
 
           var docs = snapshot.data!.docs;
 
@@ -166,6 +173,13 @@ class ChatListPage extends StatelessWidget {
                 orElse: () => '',
               );
               if (otherUid.isEmpty) return const SizedBox.shrink();
+
+              // --- PERFORMANCE FIX: READ MAPS INSTEAD OF NEW STREAM ---
+              final Map<String, dynamic> names = data['userNames'] ?? {};
+              final Map<String, dynamic> avatars = data['userAvatars'] ?? {};
+
+              final String otherName = names[otherUid] ?? "User";
+              final String? otherPhoto = avatars[otherUid];
 
               // Logic for Pinning and Status
               final bool isPinned = (data['pinnedBy'] as List? ?? []).contains(
@@ -185,164 +199,114 @@ class ChatListPage extends StatelessWidget {
                 lastMsg = "Encrypted message";
               }
 
-              // REAL-TIME USER PROFILE FETCH (Online/Name/Photo)
-              return StreamBuilder<DocumentSnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(otherUid)
-                    .snapshots(),
-                builder: (context, userSnap) {
-                  String otherName = "User";
-                  String? otherPhoto;
-                  bool isOnline = false;
-
-                  if (userSnap.hasData && userSnap.data!.exists) {
-                    final userData =
-                        userSnap.data!.data() as Map<String, dynamic>;
-                    otherName =
-                        userData['displayName'] ??
-                        userData['username'] ??
-                        "User";
-                    otherPhoto = userData['photoUrl'] ?? userData['photoURL'];
-                    isOnline = userData['isOnline'] ?? false;
-                  }
-
-                  return ListTile(
-                    tileColor: isPinned ? Colors.grey[100] : null,
-                    leading: Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 26,
-                          backgroundColor: Colors.grey[300],
-                          backgroundImage:
-                              (otherPhoto != null && otherPhoto.isNotEmpty)
-                              ? CachedNetworkImageProvider(otherPhoto)
-                              : null,
-                          child: (otherPhoto == null || otherPhoto.isEmpty)
-                              ? const Icon(Icons.person, color: Colors.white)
-                              : null,
+              return ListTile(
+                tileColor: isPinned ? Colors.grey[50] : null,
+                leading: CircleAvatar(
+                  radius: 26,
+                  backgroundColor: Colors.grey[300],
+                  backgroundImage: (otherPhoto != null && otherPhoto.isNotEmpty)
+                      ? CachedNetworkImageProvider(otherPhoto)
+                      : null,
+                  child: (otherPhoto == null || otherPhoto.isEmpty)
+                      ? const Icon(Icons.person, color: Colors.white)
+                      : null,
+                ),
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        otherName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
                         ),
-                        if (isOnline)
-                          Positioned(
-                            right: 0,
-                            bottom: 0,
-                            child: Container(
-                              width: 14,
-                              height: 14,
-                              decoration: BoxDecoration(
-                                color: Colors.green,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 2,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    title: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            otherName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (isPinned)
-                          const Icon(
-                            Icons.push_pin,
-                            size: 14,
-                            color: Colors.grey,
-                          ),
-                      ],
-                    ),
-                    subtitle: Row(
-                      children: [
-                        if (isMe) ...[
-                          _buildStatusIcon(lastStatus),
-                          const SizedBox(width: 4),
-                        ],
-                        Expanded(
-                          child: Text(
-                            lastMsg,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: unreadCount > 0
-                                  ? Colors.black87
-                                  : Colors.grey[600],
-                              fontWeight: unreadCount > 0
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          _formatDate(data['lastMessageTime']),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: unreadCount > 0
-                                ? Colors.green[800]
-                                : Colors.grey,
-                            fontWeight: unreadCount > 0
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                          ),
-                        ),
-                        if (unreadCount > 0)
-                          Container(
-                            margin: const EdgeInsets.only(top: 4),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.green[800],
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              unreadCount.toString(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ChatScreen(
-                          chatId: doc.id,
-                          receiverId: otherUid,
-                          receiverName: otherName,
-                          receiverPhoto: otherPhoto,
+                    if (isPinned)
+                      const Icon(Icons.push_pin, size: 14, color: Colors.grey),
+                  ],
+                ),
+                subtitle: Row(
+                  children: [
+                    if (isMe) ...[
+                      _buildStatusIcon(lastStatus),
+                      const SizedBox(width: 4),
+                    ],
+                    Expanded(
+                      child: Text(
+                        lastMsg,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: unreadCount > 0
+                              ? Colors.black87
+                              : Colors.grey[600],
+                          fontWeight: unreadCount > 0
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       ),
                     ),
-                    onLongPress: () => _showChatOptions(
-                      context,
-                      doc.id,
-                      otherName,
-                      isPinned,
-                      myUid,
+                  ],
+                ),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      _formatDate(data['lastMessageTime']),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: unreadCount > 0
+                            ? Colors.green[800]
+                            : Colors.grey,
+                        fontWeight: unreadCount > 0
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
                     ),
-                  );
-                },
+                    if (unreadCount > 0)
+                      Container(
+                        margin: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green[800],
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          unreadCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ChatScreen(
+                      chatId: doc.id,
+                      receiverId: otherUid,
+                      receiverName: otherName,
+                      receiverPhoto: otherPhoto,
+                    ),
+                  ),
+                ),
+                onLongPress: () => _showChatOptions(
+                  context,
+                  doc.id,
+                  otherName,
+                  isPinned,
+                  myUid,
+                ),
               );
             },
           );

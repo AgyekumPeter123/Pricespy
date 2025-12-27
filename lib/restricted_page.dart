@@ -1,11 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'login_page.dart'; // Import your Login Page
 
 class RestrictedPage extends StatelessWidget {
   final DateTime? until;
 
   const RestrictedPage({super.key, this.until});
+
+  Future<void> _handleLogout(BuildContext context) async {
+    await FirebaseAuth.instance.signOut();
+    if (context.mounted) {
+      // Navigate to Login Page and remove all previous routes
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+        (route) => false,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,12 +61,21 @@ class RestrictedPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: () => FirebaseAuth.instance.signOut(),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
-              child: const Text(
-                "Log Out",
-                style: TextStyle(color: Colors.white),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () => _handleLogout(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  "Log Out",
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
               ),
             ),
           ],

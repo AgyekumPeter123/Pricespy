@@ -15,7 +15,7 @@ class DisclaimerPage extends StatelessWidget {
         foregroundColor: Colors.white,
         leading: Builder(
           builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
+            icon: const Icon(Icons.sort),
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),

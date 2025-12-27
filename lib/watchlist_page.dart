@@ -28,11 +28,62 @@ class _WatchlistPageState extends State<WatchlistPage> {
     'West': 0,
   };
 
+  // --- MODIFICATION 1: SAFETY PERMISSION CHECK ---
+  Future<bool> _handleLocationPermission() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Location services are disabled. Please enable them to spy.',
+            ),
+          ),
+        );
+      }
+      return false;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location permissions are denied')),
+          );
+        }
+        return false;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Location permissions are permanently denied, we cannot request permissions.',
+            ),
+          ),
+        );
+      }
+      return false;
+    }
+    return true;
+  }
+
   Future<String> _runManualRadar(
     double radiusKm,
     int mySessionId,
     Function(Map<String, double>) onUpdateGraph,
   ) async {
+    // Safety Check
+    final hasPermission = await _handleLocationPermission();
+    if (!hasPermission) return "Permission Missing";
+
     try {
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
@@ -67,7 +118,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
           if (mySessionId != _scanSessionId) return "Cancelled";
 
           for (double d in steps) {
-            // Fix 3: Add delay to prevent UI freeze (Smoothness)
+            // Fix: Add delay to prevent UI freeze (Smoothness)
             await Future.delayed(const Duration(milliseconds: 5));
             String? t = await _getTown(position, d, b);
             if (t != null && t.isNotEmpty && t != _homeTown) {
@@ -141,10 +192,29 @@ class _WatchlistPageState extends State<WatchlistPage> {
   }
 
   Future<void> _triggerManualSpy(Map<String, dynamic> spyData) async {
+    // Safety Check
+    final hasPermission = await _handleLocationPermission();
+    if (!hasPermission) return;
+
+    if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text("Scanning for '${spyData['keyword']}'..."),
-        duration: const Duration(seconds: 1),
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 15),
+            Text("Scanning for '${spyData['keyword']}'..."),
+          ],
+        ),
+        duration: const Duration(seconds: 2),
       ),
     );
 
@@ -235,16 +305,21 @@ class _WatchlistPageState extends State<WatchlistPage> {
     // Reset graph for new sheet
     _sectorReach = {'North': 0, 'East': 0, 'South': 0, 'West': 0};
 
-    Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low).then((
-      pos,
-    ) async {
-      List<Placemark> marks = await placemarkFromCoordinates(
-        pos.latitude,
-        pos.longitude,
-      );
-      if (marks.isNotEmpty) {
-        _homeTown =
-            marks.first.locality ?? marks.first.subLocality ?? "your area";
+    // Use our safe permission check before grabbing hometown
+    _handleLocationPermission().then((granted) {
+      if (granted) {
+        Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.low,
+        ).then((pos) async {
+          List<Placemark> marks = await placemarkFromCoordinates(
+            pos.latitude,
+            pos.longitude,
+          );
+          if (marks.isNotEmpty) {
+            _homeTown =
+                marks.first.locality ?? marks.first.subLocality ?? "your area";
+          }
+        });
       }
     });
 
@@ -468,7 +543,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                         double.tryParse(priceController.text) ??
                                         999999;
 
-                                    // --- DUPLICATE CHECK START ---
+                                    // --- DUPLICATE CHECK ---
                                     final duplicateQuery =
                                         await FirebaseFirestore.instance
                                             .collection('users')
@@ -486,12 +561,9 @@ class _WatchlistPageState extends State<WatchlistPage> {
 
                                     bool isDuplicate = false;
                                     if (duplicateQuery.docs.isNotEmpty) {
-                                      // If creating new (isEditing=false), any match is a duplicate
                                       if (!isEditing) {
                                         isDuplicate = true;
                                       } else {
-                                        // If editing, it's only a duplicate if the ID is different
-                                        // (i.e., we are making this alert identical to another one)
                                         if (duplicateQuery.docs.first.id !=
                                             docId) {
                                           isDuplicate = true;
@@ -513,9 +585,8 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                         );
                                       }
                                       setModalState(() => isSaving = false);
-                                      return; // STOP execution
+                                      return;
                                     }
-                                    // --- DUPLICATE CHECK END ---
 
                                     Position position =
                                         await Geolocator.getCurrentPosition();
@@ -615,9 +686,10 @@ class _WatchlistPageState extends State<WatchlistPage> {
         title: const Text("My Spy Alerts"),
         backgroundColor: Colors.green[800],
         foregroundColor: Colors.white,
+        elevation: 0,
         leading: Builder(
           builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
+            icon: const Icon(Icons.sort),
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),
@@ -625,8 +697,12 @@ class _WatchlistPageState extends State<WatchlistPage> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddAlertSheet(),
         backgroundColor: Colors.green[800],
-        icon: const Icon(Icons.add_alert, color: Colors.white),
-        label: const Text("New Alert", style: TextStyle(color: Colors.white)),
+        elevation: 4,
+        icon: const Icon(Icons.add_location_alt_outlined, color: Colors.white),
+        label: const Text(
+          "New Spy",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -637,7 +713,24 @@ class _WatchlistPageState extends State<WatchlistPage> {
             .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text("No active spies."));
+            // --- MODIFICATION 2: BETTER EMPTY STATE ---
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.radar, size: 80, color: Colors.grey[300]),
+                  const SizedBox(height: 16),
+                  Text(
+                    "No active spies.",
+                    style: TextStyle(color: Colors.grey[500], fontSize: 18),
+                  ),
+                  Text(
+                    "Tap '+ New Spy' to track items nearby.",
+                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
+                  ),
+                ],
+              ),
+            );
           }
           return ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -646,74 +739,141 @@ class _WatchlistPageState extends State<WatchlistPage> {
               final data =
                   snapshot.data!.docs[index].data() as Map<String, dynamic>;
               final docId = snapshot.data!.docs[index].id;
-              return Card(
-                elevation: 2,
-                color: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+
+              // --- MODIFICATION 3: SWIPE TO DELETE ---
+              return Dismissible(
+                key: Key(docId),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.red[100],
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(Icons.delete, color: Colors.red[800]),
                 ),
-                margin: const EdgeInsets.only(bottom: 12),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  leading: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[50],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.notifications_active,
-                      color: Colors.orange[800],
-                    ),
-                  ),
-                  title: Text(
-                    data['keyword'],
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  subtitle: Text(
-                    "Max: ₵${data['max_price']} • ${data['radius_km']} km radius",
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                  // Fix 5: Icons for Delete, Edit and Search
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.youtube_searched_for,
-                          color: Colors.blue,
-                          size: 26,
+                confirmDismiss: (direction) async {
+                  return await showDialog(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return AlertDialog(
+                        title: const Text("Delete Spy?"),
+                        content: const Text(
+                          "Are you sure you want to remove this alert?",
                         ),
-                        tooltip: "Scan Now",
-                        onPressed: () => _triggerManualSpy(data),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text("Cancel"),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            child: const Text(
+                              "Delete",
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                },
+                onDismissed: (direction) {
+                  FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user!.uid)
+                      .collection('watchlist')
+                      .doc(docId)
+                      .delete();
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text("Spy removed")));
+                },
+                child: Card(
+                  elevation: 2,
+                  color: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    leading: CircleAvatar(
+                      backgroundColor: Colors.green[50],
+                      radius: 25,
+                      child: Icon(
+                        Icons.satellite_alt,
+                        color: Colors.green[800],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.grey),
-                        tooltip: "Edit",
-                        onPressed: () => _showAddAlertSheet(
-                          existingData: data,
-                          docId: docId,
+                    ),
+                    title: Text(
+                      data['keyword'],
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.monetization_on,
+                            size: 14,
+                            color: Colors.grey[500],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            "Max: ₵${data['max_price']}",
+                            style: TextStyle(color: Colors.grey[700]),
+                          ),
+                          const SizedBox(width: 10),
+                          Icon(
+                            Icons.wifi_tethering,
+                            size: 14,
+                            color: Colors.grey[500],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            "${data['radius_km']} km",
+                            style: TextStyle(color: Colors.grey[700]),
+                          ),
+                        ],
+                      ),
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Edit
+                        IconButton(
+                          icon: const Icon(
+                            Icons.edit_outlined,
+                            color: Colors.grey,
+                          ),
+                          onPressed: () => _showAddAlertSheet(
+                            existingData: data,
+                            docId: docId,
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: Colors.red,
+                        // Prominent Scan Button
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.blue[50],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: IconButton(
+                            icon: const Icon(Icons.radar, color: Colors.blue),
+                            tooltip: "Scan Now",
+                            onPressed: () => _triggerManualSpy(data),
+                          ),
                         ),
-                        onPressed: () => FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(user!.uid)
-                            .collection('watchlist')
-                            .doc(docId)
-                            .delete(),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -734,7 +894,6 @@ class _MiniRadarPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
-    // Updated paints to match Location Settings style
     final linePaint = Paint()
       ..color = Colors.grey.withOpacity(0.3)
       ..style = PaintingStyle.stroke;

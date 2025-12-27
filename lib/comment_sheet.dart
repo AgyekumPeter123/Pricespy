@@ -226,7 +226,7 @@ class _CommentSheetState extends State<CommentSheet> {
                   );
                 }
 
-                // 🟢 FIX: Separate Roots and Replies for Indentation
+                // Separate Roots and Replies
                 final topLevelComments = allDocs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
                   return data['replyToId'] == null;
@@ -239,7 +239,7 @@ class _CommentSheetState extends State<CommentSheet> {
                     final parentDoc = topLevelComments[index];
                     final parentId = parentDoc.id;
 
-                    // 🟢 Find Replies
+                    // Find Replies
                     final replies = allDocs.where((doc) {
                       final data = doc.data() as Map<String, dynamic>;
                       return data['replyToId'] == parentId;
@@ -254,20 +254,39 @@ class _CommentSheetState extends State<CommentSheet> {
                           rootId: parentId,
                         ),
 
-                        // 🟢 Render Indented Replies
+                        // UI MOD: Indented Replies with Vertical Thread Line
                         if (replies.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 48.0),
-                            child: Column(
-                              children: replies
-                                  .map(
-                                    (r) => _buildCommentItem(
-                                      r,
-                                      isReply: true,
-                                      rootId: parentId,
+                          IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // The Thread Line
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 34),
+                                  child: VerticalDivider(
+                                    width: 1,
+                                    thickness: 2,
+                                    color: Colors.grey.withOpacity(0.2),
+                                  ),
+                                ),
+                                // The Replies
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(left: 14.0),
+                                    child: Column(
+                                      children: replies
+                                          .map(
+                                            (r) => _buildCommentItem(
+                                              r,
+                                              isReply: true,
+                                              rootId: parentId,
+                                            ),
+                                          )
+                                          .toList(),
                                     ),
-                                  )
-                                  .toList(),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                       ],
@@ -285,10 +304,14 @@ class _CommentSheetState extends State<CommentSheet> {
             Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(
                     child: TextField(
                       controller: _mainCommentController,
+                      minLines: 1,
+                      maxLines: 4, // UI MOD: Smart expansion
+                      textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
                         hintText: "Add a comment...",
                         filled: true,
@@ -346,207 +369,211 @@ class _CommentSheetState extends State<CommentSheet> {
     // Check if the reply box is open specifically for THIS comment
     final bool isReplyingToThis = _activeCommentId == commentId;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: isReply ? 14 : 18,
-                backgroundImage:
-                    (data['avatar'] != null && data['avatar'].isNotEmpty)
-                    ? CachedNetworkImageProvider(data['avatar'])
-                    : null,
-                child: (data['avatar'] == null || data['avatar'].isEmpty)
-                    ? Icon(Icons.person, size: 16, color: Colors.blue[800])
-                    : null,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Username + Badges + Time
-                    Row(
-                      children: [
-                        Text(
-                          data['username'] ?? "User",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: isReply ? Colors.grey[800] : Colors.black,
-                          ),
-                        ),
-                        if (isOwner)
-                          Container(
-                            margin: const EdgeInsets.only(left: 5),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.blue[100],
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              "Owner",
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.blue,
-                              ),
-                            ),
-                          ),
-                        const Spacer(),
-                        Text(
-                          _formatTime(data['timestamp']),
-                          style: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    // Content
-                    const SizedBox(height: 2),
-                    Wrap(
-                      children: [
-                        if (data['tagged_user'] != null)
-                          Text(
-                            "@${data['tagged_user']} ",
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.blue[800],
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        Text(
-                          data['text'] ?? "",
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      ],
-                    ),
-
-                    // Action Buttons (Reply / Delete)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Row(
+    // UI MOD: Animated Highlight
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      color: isReplyingToThis
+          ? Colors.blue.withOpacity(0.05)
+          : Colors.transparent,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: isReply ? 14 : 18,
+                  backgroundImage:
+                      (data['avatar'] != null && data['avatar'].isNotEmpty)
+                      ? CachedNetworkImageProvider(data['avatar'])
+                      : null,
+                  child: (data['avatar'] == null || data['avatar'].isEmpty)
+                      ? Icon(Icons.person, size: 16, color: Colors.blue[800])
+                      : null,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Username + Badges + Time
+                      Row(
                         children: [
-                          if (!isMe)
-                            InkWell(
-                              onTap: () => _activateReplyBox(
-                                commentId,
-                                data['username'],
-                                rootId, // Always pass the top-level parent ID
-                              ),
-                              child: const Text(
-                                "Reply",
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                          Text(
+                            data['username'] ?? "User",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: isReply ? Colors.grey[800] : Colors.black,
+                            ),
+                          ),
+                          // UI MOD: Verified Icon for Owner
+                          if (isOwner)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 4.0),
+                              child: Icon(
+                                Icons.verified,
+                                color: Colors.blue,
+                                size: 14,
                               ),
                             ),
-                          if (isMe)
-                            InkWell(
-                              onTap: () => _deleteComment(commentId),
-                              child: Padding(
-                                padding: EdgeInsets.only(left: !isMe ? 15 : 0),
+                          const Spacer(),
+                          Text(
+                            _formatTime(data['timestamp']),
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      // Content
+                      const SizedBox(height: 2),
+                      Wrap(
+                        children: [
+                          if (data['tagged_user'] != null)
+                            Text(
+                              "@${data['tagged_user']} ",
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.blue[800],
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          Text(
+                            data['text'] ?? "",
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ],
+                      ),
+
+                      // Action Buttons (Reply / Delete)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          children: [
+                            if (!isMe)
+                              InkWell(
+                                onTap: () => _activateReplyBox(
+                                  commentId,
+                                  data['username'],
+                                  rootId,
+                                ),
                                 child: const Text(
-                                  "Delete",
+                                  "Reply",
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors.red,
+                                    color: Colors.grey,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // INLINE REPLY INPUT BOX (Only shows if this specific comment was clicked)
-        if (isReplyingToThis)
-          Container(
-            margin: const EdgeInsets.only(left: 46, bottom: 10),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Replying to @$_taggedUserName",
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.green[800],
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: _cancelReply,
-                      child: const Icon(
-                        Icons.close,
-                        size: 16,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _replyController,
-                        focusNode: _replyFocusNode,
-                        decoration: const InputDecoration(
-                          hintText: "Type reply...",
-                          isDense: true,
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(vertical: 8),
+                            if (isMe)
+                              InkWell(
+                                onTap: () => _deleteComment(commentId),
+                                child: Padding(
+                                  padding: EdgeInsets.only(
+                                    left: !isMe ? 15 : 0,
+                                  ),
+                                  child: const Text(
+                                    "Delete",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                        onSubmitted: (val) => _sendInlineReply(val),
                       ),
-                    ),
-                    IconButton(
-                      onPressed: () => _sendInlineReply(_replyController.text),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      icon: Icon(
-                        Icons.send,
-                        color: Colors.green[800],
-                        size: 20,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-      ],
+
+          // INLINE REPLY INPUT BOX (Only shows if this specific comment was clicked)
+          if (isReplyingToThis)
+            Container(
+              margin: const EdgeInsets.only(left: 46, bottom: 10),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Replying to @$_taggedUserName",
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.green[800],
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: _cancelReply,
+                        child: const Icon(
+                          Icons.close,
+                          size: 16,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _replyController,
+                          focusNode: _replyFocusNode,
+                          minLines: 1,
+                          maxLines: 3, // UI MOD: Smart expansion
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: const InputDecoration(
+                            hintText: "Type reply...",
+                            isDense: true,
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(vertical: 8),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () =>
+                            _sendInlineReply(_replyController.text),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        icon: Icon(
+                          Icons.send,
+                          color: Colors.green[800],
+                          size: 20,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 
   String _formatTime(Timestamp? timestamp) {
     if (timestamp == null) return "Just now";
     final dt = timestamp.toDate();
-    // TikTok/Twitter style formatting
     final diff = DateTime.now().difference(dt);
     if (diff.inDays > 7) {
       return DateFormat.MMMd().format(dt);

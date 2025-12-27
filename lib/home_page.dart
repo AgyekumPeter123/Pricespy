@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 // Project imports
 import 'add_price_sheet.dart';
@@ -15,7 +16,6 @@ import 'product_details_page.dart';
 import 'sidebar_drawer.dart';
 import 'comment_sheet.dart';
 import 'screens/chat/chat_screen.dart';
-// import 'SpyResultsPage.dart'; // No longer needed here as auto-snackbar is removed
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -27,11 +27,9 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final User? user = FirebaseAuth.instance.currentUser;
 
-  // 1. STATIC CACHE: Persists across navigation (Home -> Details -> Home)
   static Position? _cachedPosition;
   static bool _hasLoadedOnce = false;
 
-  // Instance variables
   Position? _myPosition;
   double _searchRadiusKm = 20.0;
   bool _isLocationReady = false;
@@ -76,21 +74,17 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // --- SMART LOCATION LOGIC WITH FRESHNESS CHECK ---
   Future<void> _initLocationLogic() async {
-    // 1. Memory Cache (Fastest) - Always fresh for this session
     if (_hasLoadedOnce && _cachedPosition != null) {
       if (mounted) {
         setState(() {
           _myPosition = _cachedPosition;
           _isLocationReady = true;
         });
-        // Removed auto-spy check: _checkSpyAlerts();
       }
       return;
     }
 
-    // 2. Disk Cache (SharedPreferences) - CHECK FRESHNESS
     final prefs = await SharedPreferences.getInstance();
     double? savedLat = prefs.getDouble('last_latitude');
     double? savedLng = prefs.getDouble('last_longitude');
@@ -101,9 +95,6 @@ class _HomePageState extends State<HomePage> {
     if (savedLat != null && savedLng != null && savedTime != null) {
       final lastSaved = DateTime.fromMillisecondsSinceEpoch(savedTime);
       final diff = DateTime.now().difference(lastSaved);
-
-      // RULE: If cache is younger than 30 minutes, trust it.
-      // If older, ignore it (assume user moved) and wait for GPS.
       if (diff.inMinutes < 30) {
         isCacheValid = true;
         if (mounted) {
@@ -120,15 +111,11 @@ class _HomePageState extends State<HomePage> {
               altitudeAccuracy: 0,
               headingAccuracy: 0,
             );
-            _isLocationReady = true; // Show UI immediately!
+            _isLocationReady = true;
           });
         }
       }
     }
-
-    // 3. Trigger Background Refresh
-    // If cache was valid, we do a cheap "medium" accuracy update.
-    // If cache was invalid/stale, we force "high" accuracy.
     _getCurrentLocation(forceHighAccuracy: !isCacheValid);
   }
 
@@ -140,8 +127,6 @@ class _HomePageState extends State<HomePage> {
         if (permission == LocationPermission.denied) return;
       }
 
-      // FIX #1: Respect forceHighAccuracy to save battery/speed
-      // Background updates use Medium, Fresh loads use High
       Position freshPosition = await Geolocator.getCurrentPosition(
         desiredAccuracy: forceHighAccuracy
             ? LocationAccuracy.high
@@ -164,16 +149,12 @@ class _HomePageState extends State<HomePage> {
           _myPosition = freshPosition;
           _isLocationReady = true;
         });
-        // Removed auto-spy check: _checkSpyAlerts();
       }
     } catch (e) {
       debugPrint("GPS Error: $e");
-      // Even if GPS fails, ensure we stop showing skeletons so users aren't stuck
       if (mounted) setState(() => _isLocationReady = true);
     }
   }
-
-  // Auto Spy Alert Logic Removed per User Request (Fix 5)
 
   Future<void> _refreshAll() async {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -182,12 +163,101 @@ class _HomePageState extends State<HomePage> {
         duration: Duration(milliseconds: 1000),
       ),
     );
-    // On manual refresh, we always force fresh High Accuracy GPS
     await _loadSettings();
     await _getCurrentLocation(forceHighAccuracy: true);
   }
 
-  // --- SKELETON LOADER WIDGET ---
+  Widget _buildMarketOverviewChart(int shopCount, int indCount) {
+    if (shopCount == 0 && indCount == 0) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Market Intelligence",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Live breakdown of nearby sellers",
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                _buildLegendItem("Shop Owners", shopCount, Colors.blue[700]!),
+                const SizedBox(height: 6),
+                _buildLegendItem("Individuals", indCount, Colors.orange[400]!),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 100,
+            width: 100,
+            child: PieChart(
+              PieChartData(
+                sectionsSpace: 2,
+                centerSpaceRadius: 25,
+                sections: [
+                  PieChartSectionData(
+                    color: Colors.blue[700],
+                    value: shopCount.toDouble(),
+                    radius: 25,
+                    showTitle: false,
+                  ),
+                  PieChartSectionData(
+                    color: Colors.orange[400],
+                    value: indCount.toDouble(),
+                    radius: 25,
+                    showTitle: false,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegendItem(String label, int count, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          "$label ($count)",
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        ),
+      ],
+    );
+  }
+
+  // 🟢 FIXED: Restored the detailed Skeleton Loader
   Widget _buildSkeletonLoader() {
     return ListView.builder(
       itemCount: 4,
@@ -203,6 +273,7 @@ class _HomePageState extends State<HomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Image Placeholder
               Container(
                 height: 180,
                 decoration: BoxDecoration(
@@ -212,6 +283,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
+              // Text Placeholders
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
@@ -248,24 +320,24 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    // 7-day window for freshness
     final DateTime sevenDaysAgo = DateTime.now().subtract(
       const Duration(days: 7),
     );
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: Colors.grey[50],
       drawer: const SidebarDrawer(isHome: true),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 180.0,
+            expandedHeight: 160.0,
             floating: false,
             pinned: true,
             backgroundColor: Colors.green[800],
+            elevation: 0,
             leading: Builder(
               builder: (context) => IconButton(
-                icon: const Icon(Icons.menu, color: Colors.white),
+                icon: const Icon(Icons.sort, color: Colors.white),
                 onPressed: () => Scaffold.of(context).openDrawer(),
               ),
             ),
@@ -273,7 +345,6 @@ class _HomePageState extends State<HomePage> {
               IconButton(
                 onPressed: _refreshAll,
                 icon: const Icon(Icons.refresh, color: Colors.white),
-                tooltip: "Refresh Location & Feed",
               ),
               IconButton(
                 onPressed: () => showModalBottomSheet(
@@ -283,7 +354,6 @@ class _HomePageState extends State<HomePage> {
                   builder: (context) => const AddPriceSheet(),
                 ),
                 icon: const Icon(Icons.camera_enhance, color: Colors.white),
-                tooltip: "Spy Price",
               ),
               const SizedBox(width: 8),
             ],
@@ -291,55 +361,68 @@ class _HomePageState extends State<HomePage> {
               background: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Colors.green.shade900, Colors.green.shade600],
+                    colors: [Colors.green[900]!, Colors.green[600]!],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                 ),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 40),
-                      const Text(
-                        "PriceSpy",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.5,
-                        ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    const Text(
+                      "PriceSpy",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.2,
                       ),
-                      const SizedBox(height: 20),
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 20),
-                        height: 45,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: TextField(
-                          controller: _searchController,
-                          decoration: InputDecoration(
-                            icon: const Icon(Icons.search, color: Colors.grey),
-                            hintText: "Search cement, rice...",
-                            hintStyle: TextStyle(color: Colors.grey[500]),
-                            border: InputBorder.none,
-                            suffixIcon: _searchQuery.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(
-                                      Icons.clear,
-                                      color: Colors.grey,
-                                    ),
-                                    onPressed: () => _searchController.clear(),
-                                  )
-                                : null,
+                    ),
+                    const SizedBox(height: 15),
+                    Container(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
                           ),
+                        ],
+                      ),
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            color: Colors.green,
+                          ),
+                          hintText: "Search cement, rice, iron rods...",
+                          hintStyle: TextStyle(color: Colors.grey[400]),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 14,
+                          ),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(
+                                    Icons.clear,
+                                    color: Colors.grey,
+                                  ),
+                                  onPressed: () => _searchController.clear(),
+                                )
+                              : null,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                 ),
               ),
             ),
@@ -347,52 +430,57 @@ class _HomePageState extends State<HomePage> {
           SliverToBoxAdapter(
             child: Column(
               children: [
+                // Filters
                 Container(
-                  height: 60,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: ListView.builder(
+                  height: 65,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: _filters.length,
+                    separatorBuilder: (c, i) => const SizedBox(width: 10),
                     itemBuilder: (context, index) {
                       final filterName = _filters[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 10),
-                        child: FilterChip(
-                          label: Text(filterName),
-                          selected: _selectedFilter == filterName,
-                          onSelected: (bool selected) =>
-                              setState(() => _selectedFilter = filterName),
-                          backgroundColor: Colors.white,
-                          selectedColor: Colors.green[800],
-                          labelStyle: TextStyle(
-                            color: _selectedFilter == filterName
-                                ? Colors.white
-                                : Colors.black87,
+                      final isSelected = _selectedFilter == filterName;
+                      return FilterChip(
+                        label: Text(filterName),
+                        selected: isSelected,
+                        onSelected: (bool selected) =>
+                            setState(() => _selectedFilter = filterName),
+                        backgroundColor: Colors.white,
+                        selectedColor: Colors.green[50],
+                        checkmarkColor: Colors.green[800],
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: isSelected
+                                ? Colors.green[800]!
+                                : Colors.grey[300]!,
                           ),
-                          checkmarkColor: Colors.white,
+                        ),
+                        labelStyle: TextStyle(
+                          color: isSelected
+                              ? Colors.green[800]
+                              : Colors.grey[700],
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       );
                     },
                   ),
                 ),
+                // Location Status
                 if (_myPosition != null)
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.location_on,
-                          size: 14,
-                          color: Colors.green[800],
-                        ),
-                        const SizedBox(width: 4),
+                        Icon(Icons.radar, size: 14, color: Colors.green[800]),
+                        const SizedBox(width: 6),
                         Text(
-                          "Showing items within ${_searchRadiusKm.round()} km",
+                          "Scanning radius: ${_searchRadiusKm.round()} km",
                           style: TextStyle(
                             color: Colors.green[800],
                             fontSize: 12,
@@ -406,8 +494,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           StreamBuilder<QuerySnapshot>(
-            // FIX #2: Pass NULL if location isn't ready.
-            // This prevents Firestore reads until we know where we are.
             stream: _isLocationReady
                 ? FirebaseFirestore.instance
                       .collection('posts')
@@ -435,7 +521,20 @@ class _HomePageState extends State<HomePage> {
 
               if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                 return const SliverFillRemaining(
-                  child: Center(child: Text("No recent intel found.")),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.inventory_2_outlined,
+                          size: 60,
+                          color: Colors.grey,
+                        ),
+                        SizedBox(height: 10),
+                        Text("No recent intel found nearby."),
+                      ],
+                    ),
+                  ),
                 );
               }
 
@@ -476,7 +575,6 @@ class _HomePageState extends State<HomePage> {
                   return dist <= (_searchRadiusKm * 1000);
                 }).toList();
               } else {
-                // Fallback if position is null (Safety check)
                 return SliverFillRemaining(child: _buildSkeletonLoader());
               }
 
@@ -518,35 +616,45 @@ class _HomePageState extends State<HomePage> {
                 return distA.compareTo(distB);
               });
 
+              // 📊 Calculate Stats for Chart
+              int shopCount = 0;
+              int indCount = 0;
+              for (var doc in docs) {
+                final type = (doc.data() as Map)['poster_type'];
+                if (type == 'Shop Owner')
+                  shopCount++;
+                else
+                  indCount++;
+              }
+
               if (docs.isEmpty) {
-                return SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.location_off,
-                          size: 50,
-                          color: Colors.grey,
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          "No items found within ${_searchRadiusKm.round()} km.",
-                        ),
-                        TextButton(
-                          onPressed: _refreshAll,
-                          child: const Text("Refresh Location"),
-                        ),
-                      ],
-                    ),
-                  ),
+                return const SliverFillRemaining(
+                  child: Center(child: Text("No items match your filter.")),
                 );
               }
 
               return SliverList(
                 delegate: SliverChildBuilderDelegate((context, index) {
-                  final data = docs[index].data() as Map<String, dynamic>;
-                  final docId = docs[index].id;
+                  // 🟢 INSERT CHART AT THE TOP
+                  if (index == 0) {
+                    return Column(
+                      children: [
+                        _buildMarketOverviewChart(shopCount, indCount),
+                        IntelCard(
+                          key: ValueKey(docs[0].id),
+                          data: docs[0].data() as Map<String, dynamic>,
+                          docId: docs[0].id,
+                          userUid: user?.uid ?? '',
+                          userPosition: _myPosition,
+                        ),
+                      ],
+                    );
+                  }
+
+                  final realIndex = index;
+                  final data = docs[realIndex].data() as Map<String, dynamic>;
+                  final docId = docs[realIndex].id;
+
                   return Padding(
                     padding: index == docs.length - 1
                         ? const EdgeInsets.only(bottom: 80)
@@ -602,7 +710,6 @@ class IntelCard extends StatelessWidget {
         'phone': data['phone'],
         'whatsapp_phone': data['whatsapp_phone'],
         'original_id': docId,
-        // FIX 1: Save Uploader ID for comments to work later
         'uploader_id': data['uploader_id'],
         'saved_at': FieldValue.serverTimestamp(),
       });
@@ -636,11 +743,8 @@ class IntelCard extends StatelessWidget {
                     title: const Text("Start Private Chat"),
                     subtitle: const Text("Secure end-to-end encrypted"),
                     onTap: () {
-                      Navigator.pop(sheetContext); // Close sheet
-                      _startPrivateChat(
-                        parentContext,
-                        receiverId,
-                      ); // Start chat
+                      Navigator.pop(sheetContext);
+                      _startPrivateChat(parentContext, receiverId);
                     },
                   ),
                 ],

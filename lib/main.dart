@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart'; 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'splash_screen.dart';
 import 'onboarding_page.dart';
 import 'lifecycle_manager.dart';
@@ -12,10 +12,10 @@ void main() async {
 
   // 🟢 2. LOAD SECRETS FIRST
   try {
-    await dotenv.load(fileName: "KEYS.env");
+    await dotenv.load(fileName: ".env");
     print("✅ Secrets loaded");
   } catch (e) {
-    print("❌ Failed to load KEYS.env: $e");
+    print("❌ Failed to load .env: $e");
   }
 
   try {
@@ -34,11 +34,7 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   final bool seenOnboarding = prefs.getBool('seenOnboarding') ?? false;
 
-  runApp(
-    LifeCycleManager(
-      child: App(showOnboarding: !seenOnboarding),
-    ),
-  );
+  runApp(LifeCycleManager(child: App(showOnboarding: !seenOnboarding)));
 }
 
 class App extends StatelessWidget {

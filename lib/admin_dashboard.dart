@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
+import 'package:fl_chart/fl_chart.dart'; // 🟢 Ensure fl_chart: ^0.66.0 is in pubspec.yaml
 
 // Project specific imports
 import 'product_details_page.dart';
@@ -27,7 +28,6 @@ class _AdminDashboardState extends State<AdminDashboard>
   // Admin Config
   final String _adminEmail = "agyekumpeter123@gmail.com";
   final String _appPassword = "mmvc nwcj alff edwr";
-  
 
   @override
   void initState() {
@@ -151,42 +151,14 @@ class _AdminDashboardState extends State<AdminDashboard>
                     child: DropdownButton<String>(
                       value: severity,
                       isExpanded: true,
-                      items: [
-                        DropdownMenuItem(
-                          value: "Notice",
-                          child: Row(
-                            children: const [
-                              Icon(Icons.info, color: Colors.blue, size: 18),
-                              SizedBox(width: 8),
-                              Text("Friendly Notice"),
-                            ],
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: "Warning",
-                          child: Row(
-                            children: const [
-                              Icon(
-                                Icons.warning,
-                                color: Colors.orange,
-                                size: 18,
-                              ),
-                              SizedBox(width: 8),
-                              Text("Official Warning"),
-                            ],
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: "Critical",
-                          child: Row(
-                            children: const [
-                              Icon(Icons.report, color: Colors.red, size: 18),
-                              SizedBox(width: 8),
-                              Text("Final / Critical"),
-                            ],
-                          ),
-                        ),
-                      ],
+                      items: ["Notice", "Warning", "Critical"]
+                          .map(
+                            (val) => DropdownMenuItem(
+                              value: val,
+                              child: Text("$val Level"),
+                            ),
+                          )
+                          .toList(),
                       onChanged: (val) {
                         if (val != null) setState(() => severity = val);
                       },
@@ -205,9 +177,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                 TextField(
                   controller: messageController,
                   maxLines: 4,
-                  scrollPhysics: const BouncingScrollPhysics(),
                   decoration: InputDecoration(
-                    hintText: "Enter the reason for this warning...",
+                    hintText: "Enter reason...",
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -221,7 +192,7 @@ class _AdminDashboardState extends State<AdminDashboard>
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text("CANCEL", style: TextStyle(color: Colors.grey)),
+              child: const Text("CANCEL"),
             ),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
@@ -229,22 +200,16 @@ class _AdminDashboardState extends State<AdminDashboard>
                 foregroundColor: Colors.white,
               ),
               icon: const Icon(Icons.send, size: 16),
-              label: const Text("SEND & OPEN CHAT"),
+              label: const Text("SEND"),
               onPressed: () {
-                if (messageController.text.trim().isEmpty) {
-                  _showSnackBar("Please enter a message", isError: true);
-                  return;
-                }
+                if (messageController.text.trim().isEmpty) return;
                 Navigator.pop(context);
-
-                String icon = "⚠️";
-                if (severity == "Notice") icon = "ℹ️";
+                String icon = severity == "Notice" ? "ℹ️" : "⚠️";
                 if (severity == "Critical") icon = "⛔";
-
-                String finalMsg =
-                    "$icon ADMIN ${severity.toUpperCase()}: ${messageController.text.trim()}";
-
-                _sendWarningAndOpenChat(userId, finalMsg);
+                _sendWarningAndOpenChat(
+                  userId,
+                  "$icon ADMIN ${severity.toUpperCase()}: ${messageController.text.trim()}",
+                );
               },
             ),
           ],
@@ -253,7 +218,6 @@ class _AdminDashboardState extends State<AdminDashboard>
     );
   }
 
-  // --- EXECUTE WARNING CHAT ---
   Future<void> _sendWarningAndOpenChat(
     String userId,
     String messageText,
@@ -263,19 +227,11 @@ class _AdminDashboardState extends State<AdminDashboard>
           .collection('users')
           .doc(userId)
           .get();
-
-      if (!doc.exists) {
-        _showSnackBar("User not found.", isError: true);
-        return;
-      }
+      if (!doc.exists) return;
 
       final data = doc.data() as Map<String, dynamic>;
-      final name = data['displayName'] ?? "User";
-      final photo = data['photoUrl'];
       final adminId = FirebaseAuth.instance.currentUser!.uid;
-
-      final List<String> ids = [adminId, userId];
-      ids.sort();
+      final List<String> ids = [adminId, userId]..sort();
       final String chatId = ids.join("_");
 
       final String encryptedMsg = EncryptionService.encryptMessage(
@@ -288,8 +244,8 @@ class _AdminDashboardState extends State<AdminDashboard>
         'lastMessage': encryptedMsg,
         'lastMessageTime': FieldValue.serverTimestamp(),
         'lastSenderId': adminId,
-        'userNames': {adminId: "PriceSpy Admin", userId: name},
-        'userAvatars': {adminId: null, userId: photo},
+        'userNames': {adminId: "PriceSpy Admin", userId: data['displayName']},
+        'userAvatars': {adminId: null, userId: data['photoUrl']},
         'unread_$userId': FieldValue.increment(1),
         'visibleFor': FieldValue.arrayUnion([adminId, userId]),
       }, SetOptions(merge: true));
@@ -305,30 +261,26 @@ class _AdminDashboardState extends State<AdminDashboard>
             'type': 'text',
             'status': 'sent',
             'timestamp': FieldValue.serverTimestamp(),
-            'deletedFor': [],
-            'isDeleted': false,
           });
 
       if (!mounted) return;
-
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => ChatScreen(
+          builder: (_) => ChatScreen(
             chatId: chatId,
             receiverId: userId,
-            receiverName: "ADMIN: $name",
-            receiverPhoto: photo,
+            receiverName: "ADMIN: ${data['displayName']}",
+            receiverPhoto: data['photoUrl'],
           ),
         ),
       );
     } catch (e) {
-      debugPrint("Error details: $e");
-      _showSnackBar("Chat Error: $e", isError: true);
+      _showSnackBar("Error: $e", isError: true);
     }
   }
 
-  // --- USER RESTRICTION ---
+  // --- RESTRICTION LOGIC ---
   Future<void> _restrictUserWithInput(
     String userId,
     String currentEmail,
@@ -344,18 +296,13 @@ class _AdminDashboardState extends State<AdminDashboard>
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text("Select restriction duration:"),
-              const SizedBox(height: 15),
               Row(
                 children: [
                   Expanded(
                     child: TextField(
                       controller: durationController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: "Duration",
-                        border: OutlineInputBorder(),
-                      ),
+                      decoration: const InputDecoration(labelText: "Duration"),
                     ),
                   ),
                   const SizedBox(width: 15),
@@ -402,39 +349,27 @@ class _AdminDashboardState extends State<AdminDashboard>
     int amount,
     String type,
   ) async {
-    try {
-      final expiry = type == 'Hours'
-          ? DateTime.now().add(Duration(hours: amount))
-          : DateTime.now().add(Duration(days: amount));
-      await FirebaseFirestore.instance.collection('users').doc(userId).update({
-        'isRestricted': true,
-        'restrictedUntil': Timestamp.fromDate(expiry),
-      });
-      _showSnackBar("User restricted for $amount $type.");
-    } catch (e) {
-      _showSnackBar("Action failed: $e", isError: true);
-    }
+    final expiry = type == 'Hours'
+        ? DateTime.now().add(Duration(hours: amount))
+        : DateTime.now().add(Duration(days: amount));
+    await FirebaseFirestore.instance.collection('users').doc(userId).update({
+      'isRestricted': true,
+      'restrictedUntil': Timestamp.fromDate(expiry),
+    });
+    _showSnackBar("User restricted for $amount $type.");
   }
 
   Future<void> _liftRestriction(String userId) async {
-    try {
-      await FirebaseFirestore.instance.collection('users').doc(userId).update({
-        'isRestricted': false,
-        'restrictedUntil': null,
-      });
-      _showSnackBar("Restriction lifted.");
-    } catch (e) {
-      _showSnackBar("Failed to lift restriction: $e", isError: true);
-    }
+    await FirebaseFirestore.instance.collection('users').doc(userId).update({
+      'isRestricted': false,
+      'restrictedUntil': null,
+    });
+    _showSnackBar("Restriction lifted.");
   }
 
   Future<void> _deleteUserRecord(String userId) async {
-    try {
-      await FirebaseFirestore.instance.collection('users').doc(userId).delete();
-      _showSnackBar("User profile deleted (Auth account remains).");
-    } catch (e) {
-      _showSnackBar("Failed to delete user: $e", isError: true);
-    }
+    await FirebaseFirestore.instance.collection('users').doc(userId).delete();
+    _showSnackBar("User profile deleted.");
   }
 
   @override
@@ -460,21 +395,27 @@ class _AdminDashboardState extends State<AdminDashboard>
           indicatorWeight: 4,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white60,
-          labelStyle: const TextStyle(fontWeight: FontWeight.bold),
           tabs: const [
             Tab(text: "REPORTS"),
             Tab(text: "USERS"),
           ],
         ),
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.sort), // <--- The Sort Icon you wanted
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [_buildReportsList(), _buildUserManagement()],
+        children: [_buildReportsTab(), _buildUsersTab()],
       ),
     );
   }
 
-  Widget _buildReportsList() {
+  // 🔴 1. REPORTS TAB WITH CHARTS & TIE-BREAKER LOGIC
+  Widget _buildReportsTab() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('reports')
@@ -485,42 +426,379 @@ class _AdminDashboardState extends State<AdminDashboard>
           return const Center(child: CircularProgressIndicator());
         }
         final docs = snapshot.data!.docs;
-        if (docs.isEmpty) {
-          return const Center(child: Text("No pending reports."));
+
+        // --- 📊 Smart Analytics Logic ---
+        Map<String, int> reasonCounts = {};
+        for (var doc in docs) {
+          String r = (doc.data() as Map)['reason'] ?? 'Other';
+          reasonCounts[r] = (reasonCounts[r] ?? 0) + 1;
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: Colors.grey.shade200),
-              ),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.red.shade50,
-                  child: const Icon(Icons.report, color: Colors.red),
+        String displayLabel = "Most Common";
+        String displayValue = "None";
+
+        if (reasonCounts.isNotEmpty) {
+          // 1. Find the highest count
+          int maxCount = reasonCounts.values.reduce((a, b) => a > b ? a : b);
+
+          // 2. Find ALL reasons that match this count
+          List<String> topReasons = reasonCounts.entries
+              .where((e) => e.value == maxCount)
+              .map((e) => e.key)
+              .toList();
+
+          // 3. Formatter: Join ties, truncate if too long
+          if (topReasons.length == 1) {
+            displayLabel = "Most Common";
+            displayValue = topReasons.first;
+          } else {
+            displayLabel = "Top Issues (Tie)";
+            // If more than 2 tied, show "+X"
+            if (topReasons.length > 2) {
+              displayValue =
+                  "${topReasons[0]}, ${topReasons[1]} (+${topReasons.length - 2})";
+            } else {
+              displayValue = topReasons.join(" & ");
+            }
+          }
+        }
+
+        return Column(
+          children: [
+            // --- Analytics Header ---
+            if (docs.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.blueGrey.shade800,
+                      Colors.blueGrey.shade900,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 10,
+                      offset: Offset(0, 5),
+                    ),
+                  ],
                 ),
-                title: Text(
-                  data['reason'] ?? "Policy Violation",
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Pending Issues",
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            "${docs.length}",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            "$displayLabel:",
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Text(
+                            displayValue,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.orangeAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // 📊 MINI PIE CHART
+                    SizedBox(
+                      height: 100,
+                      width: 100,
+                      child: PieChart(
+                        PieChartData(
+                          sectionsSpace: 2,
+                          centerSpaceRadius: 20,
+                          sections: reasonCounts.entries.map((e) {
+                            return PieChartSectionData(
+                              value: e.value.toDouble(),
+                              title: "", // Hide text on chart for cleanliness
+                              radius: 30,
+                              color:
+                                  Colors.primaries[reasonCounts.keys
+                                          .toList()
+                                          .indexOf(e.key) %
+                                      Colors.primaries.length],
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                subtitle: Text("Item: ${data['productName'] ?? 'Unknown'}"),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _showReportActionSheet(docs[index].id, data),
               ),
-            );
-          },
+
+            // --- Reports List ---
+            Expanded(
+              child: docs.isEmpty
+                  ? const Center(child: Text("All Clean! No pending reports."))
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        final data = docs[index].data() as Map<String, dynamic>;
+                        return Card(
+                          elevation: 2,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.red.shade50,
+                              child: const Icon(
+                                Icons.warning,
+                                color: Colors.red,
+                              ),
+                            ),
+                            title: Text(
+                              data['reason'] ?? "Violation",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              "Item: ${data['productName'] ?? 'Unknown'}",
+                            ),
+                            trailing: const Icon(
+                              Icons.arrow_forward_ios,
+                              size: 16,
+                              color: Colors.grey,
+                            ),
+                            onTap: () =>
+                                _showReportActionSheet(docs[index].id, data),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
         );
       },
     );
   }
 
+  // 🔴 2. USERS TAB WITH GAUGE STATS
+  Widget _buildUsersTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('users').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        var users = snapshot.data!.docs;
+
+        // 📊 Filter Logic
+        if (_userSearchQuery.isNotEmpty) {
+          users = users
+              .where(
+                (u) => (u.data() as Map)['email']
+                    .toString()
+                    .toLowerCase()
+                    .contains(_userSearchQuery),
+              )
+              .toList();
+        }
+
+        // 📊 Stats Calculation
+        int total = users.length;
+        int restricted = users
+            .where((u) => (u.data() as Map)['isRestricted'] == true)
+            .length;
+        int active = total - restricted;
+
+        return Column(
+          children: [
+            // --- Status Bar ---
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildStatItem(
+                        "Active Users",
+                        "$active",
+                        Colors.green.shade700,
+                      ),
+                      Container(
+                        width: 1,
+                        height: 40,
+                        color: Colors.grey.shade300,
+                      ),
+                      _buildStatItem(
+                        "Restricted",
+                        "$restricted",
+                        Colors.red.shade700,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  // Visual Gauge
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      value: total == 0 ? 0 : active / total,
+                      backgroundColor: Colors.red.shade100,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Colors.green.shade400,
+                      ),
+                      minHeight: 8,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Search Bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _userSearchController,
+                decoration: InputDecoration(
+                  hintText: "Search user email...",
+                  prefixIcon: const Icon(Icons.search),
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                onChanged: (v) =>
+                    setState(() => _userSearchQuery = v.toLowerCase()),
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Users List
+            Expanded(
+              child: ListView.builder(
+                itemCount: users.length,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemBuilder: (context, index) {
+                  final userData = users[index].data() as Map<String, dynamic>;
+                  final isRestricted = userData['isRestricted'] ?? false;
+                  final Timestamp? restrictedUntil =
+                      userData['restrictedUntil'];
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    elevation: 0,
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: isRestricted
+                            ? Colors.red.shade100
+                            : Colors.transparent,
+                      ),
+                    ),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundImage:
+                            (userData['photoUrl'] != null &&
+                                userData['photoUrl'] != '')
+                            ? NetworkImage(userData['photoUrl'])
+                            : null,
+                        child:
+                            (userData['photoUrl'] == null ||
+                                userData['photoUrl'] == '')
+                            ? Text(userData['displayName']?[0] ?? 'U')
+                            : null,
+                      ),
+                      title: Text(
+                        userData['displayName'] ?? "User",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: isRestricted && restrictedUntil != null
+                          ? Text(
+                              "⛔ Restricted until: ${DateFormat('MMM d, h:mm a').format(restrictedUntil.toDate())}",
+                              style: TextStyle(
+                                color: Colors.red.shade700,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )
+                          : Text(userData['email'] ?? ""),
+                      trailing: isRestricted
+                          ? const Icon(Icons.lock, color: Colors.red)
+                          : const Icon(Icons.check_circle, color: Colors.green),
+                      onTap: () =>
+                          _showUserActionSheet(users[index].id, userData),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade600,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // --- REPORT ACTION SHEET (Unchanged) ---
   void _showReportActionSheet(String reportId, Map<String, dynamic> data) {
     showModalBottomSheet(
       context: context,
@@ -553,7 +831,6 @@ class _AdminDashboardState extends State<AdminDashboard>
               subtitle: const Text("Open post details"),
               onTap: () async {
                 Navigator.pop(sheetContext);
-
                 showDialog(
                   context: context,
                   barrierDismissible: false,
@@ -566,16 +843,12 @@ class _AdminDashboardState extends State<AdminDashboard>
                   if (postId == null || postId.isEmpty) {
                     throw Exception("Report is missing Post ID");
                   }
-
                   final post = await FirebaseFirestore.instance
                       .collection('posts')
                       .doc(postId)
-                      .get()
-                      .timeout(const Duration(seconds: 10));
-
+                      .get();
                   if (!mounted) return;
                   Navigator.of(context).pop();
-
                   if (post.exists && post.data() != null) {
                     Navigator.push(
                       context,
@@ -583,7 +856,7 @@ class _AdminDashboardState extends State<AdminDashboard>
                         builder: (c) => ProductDetailsPage(
                           data: post.data()!,
                           documentId: post.id,
-                          userPosition: null, // Admin sees NO location filter
+                          userPosition: null,
                         ),
                       ),
                     );
@@ -594,10 +867,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                     );
                   }
                 } catch (e) {
-                  if (mounted && Navigator.canPop(context)) {
-                    Navigator.of(context).pop();
-                  }
-                  _showSnackBar("Error: ${e.toString()}", isError: true);
+                  Navigator.of(context).pop();
+                  _showSnackBar("Error: $e", isError: true);
                 }
               },
             ),
@@ -649,126 +920,7 @@ class _AdminDashboardState extends State<AdminDashboard>
     );
   }
 
-  Widget _buildUserManagement() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: TextField(
-            controller: _userSearchController,
-            decoration: InputDecoration(
-              hintText: "Search email...",
-              prefixIcon: const Icon(Icons.search),
-              filled: true,
-              fillColor: Colors.white,
-              // 🟢 MOVED: contentPadding belongs here, NOT in OutlineInputBorder
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(30),
-                borderSide: BorderSide.none,
-              ),
-            ),
-            onChanged: (v) =>
-                setState(() => _userSearchQuery = v.toLowerCase()),
-          ),
-        ),
-        Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('users').snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData)
-                return const Center(child: CircularProgressIndicator());
-              var users = snapshot.data!.docs;
-              if (_userSearchQuery.isNotEmpty) {
-                users = users
-                    .where(
-                      (u) => (u.data() as Map)['email']
-                          .toString()
-                          .toLowerCase()
-                          .contains(_userSearchQuery),
-                    )
-                    .toList();
-              }
-              return ListView.builder(
-                itemCount: users.length,
-                itemBuilder: (context, index) {
-                  final userData = users[index].data() as Map<String, dynamic>;
-                  final isRestricted = userData['isRestricted'] ?? false;
-                  final Timestamp? restrictedUntil =
-                      userData['restrictedUntil'];
-
-                  return Card(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
-                    ),
-                    elevation: 0,
-                    color: Colors.white,
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage:
-                            (userData['photoUrl'] != null &&
-                                userData['photoUrl'] != '')
-                            ? NetworkImage(userData['photoUrl'])
-                            : null,
-                        child:
-                            (userData['photoUrl'] == null ||
-                                userData['photoUrl'] == '')
-                            ? Text(userData['displayName']?[0] ?? 'U')
-                            : null,
-                      ),
-                      title: Text(
-                        userData['displayName'] ?? "User",
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(userData['email'] ?? ""),
-                          if (isRestricted && restrictedUntil != null)
-                            Text(
-                              "Ends: ${DateFormat('MMM d, h:mm a').format(restrictedUntil.toDate())}",
-                              style: const TextStyle(
-                                color: Colors.red,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                        ],
-                      ),
-                      trailing: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isRestricted
-                              ? Colors.red.shade50
-                              : Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          isRestricted ? "BANNED" : "ACTIVE",
-                          style: TextStyle(
-                            color: isRestricted ? Colors.red : Colors.green,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      onTap: () =>
-                          _showUserActionSheet(users[index].id, userData),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
+  // --- USER ACTION SHEET (Unchanged) ---
   void _showUserActionSheet(String userId, Map<String, dynamic> userData) {
     final bool isRestricted = userData['isRestricted'] ?? false;
     showModalBottomSheet(

@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
-import 'package:http/http.dart' as http;
+import 'package:http/http.dart' as http; // Kept for Exchange Rate API only
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_generative_ai/google_generative_ai.dart'; // NEW SDK
 
 class ChurnService {
   Interpreter? _interpreter;
@@ -11,12 +12,8 @@ class ChurnService {
   double _threshold = 0.5;
   double _cachedExchangeRate = 15.0;
 
-  // ✅ FIXED: Using your API Key
+  // Retrieve API Key
   static String get _apiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
-
-  // ✅ UPDATED: Switched to 'gemini-2.5-flash' (Late 2025 Standard)
-  static const String _baseUrl =
-      'https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent';
 
   bool get isLoaded => _interpreter != null;
 
@@ -98,13 +95,16 @@ class ChurnService {
     return inputRow;
   }
 
-  // --- GEMINI 2.5 ADVICE GENERATOR ---
+  // --- GEMINI 2.5 PRO ADVICE GENERATOR (SDK VERSION) ---
   Future<String> _getGeminiAdvice(
     bool isChurn,
     Map<String, dynamic> inputs,
     List<String> risks,
   ) async {
     try {
+      // Initialize the Model via SDK
+      final model = GenerativeModel(model: 'gemini-2.5-flash', apiKey: _apiKey);
+
       final prompt =
           '''
       You are a business retention expert for a service business in Ghana.
@@ -117,30 +117,12 @@ class ChurnService {
       Task: Provide ONE specific, actionable recommendation (max 2 sentences) to ${isChurn ? "retain this customer" : "reward their loyalty"}.
       ''';
 
-      final url = Uri.parse('$_baseUrl?key=$_apiKey');
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "contents": [
-            {
-              "parts": [
-                {"text": prompt},
-              ],
-            },
-          ],
-        }),
-      );
+      final content = [Content.text(prompt)];
+      final response = await model.generateContent(content);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['candidates'][0]['content']['parts'][0]['text'];
-      } else {
-        print("Gemini API Error: ${response.body}");
-        return "Improve customer service quality.";
-      }
+      return response.text ?? "Improve customer service quality.";
     } catch (e) {
-      print("Connection Error: $e");
+      print("Gemini SDK Error: $e");
       return isChurn ? "Offer a loyalty discount." : "Send a thank you note.";
     }
   }

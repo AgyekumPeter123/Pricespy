@@ -249,6 +249,12 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
         title: const Text("Discovery Settings"),
         backgroundColor: Colors.green[800],
         foregroundColor: Colors.white,
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.sort), // <--- The Sort Icon you wanted
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

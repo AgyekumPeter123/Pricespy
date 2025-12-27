@@ -477,6 +477,45 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  // --- HELPER METHODS FOR DATE CHIPS ---
+  bool _isSameDay(DateTime d1, DateTime d2) {
+    return d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;
+  }
+
+  Widget _buildDateChip(DateTime date) {
+    final now = DateTime.now();
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    String label;
+
+    if (_isSameDay(date, now)) {
+      label = "Today";
+    } else if (_isSameDay(date, yesterday)) {
+      label = "Yesterday";
+    } else {
+      label = "${date.day}/${date.month}/${date.year}";
+    }
+
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.grey[300],
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 2)],
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.black54,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -504,6 +543,7 @@ class _ChatScreenState extends State<ChatScreen> {
           : AppBar(
               backgroundColor: Colors.green[800],
               titleSpacing: 0,
+              // --- CHANGED: NESTED STREAM FOR PRESENCE + TYPING ---
               title: StreamBuilder<DocumentSnapshot>(
                 stream: _statusService.getUserPresenceStream(widget.receiverId),
                 builder: (context, snapshot) {
@@ -521,37 +561,58 @@ class _ChatScreenState extends State<ChatScreen> {
                     isOnline = userData['isOnline'] ?? false;
                   }
 
-                  return Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundImage: photo != null
-                            ? CachedNetworkImageProvider(photo)
-                            : null,
-                        child: photo == null ? const Icon(Icons.person) : null,
-                      ),
-                      const SizedBox(width: 10),
-                      // 🟢 FIX: Wrap Column in Expanded to prevent pixel overflow
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              name,
-                              style: const TextStyle(fontSize: 16),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
+                  return StreamBuilder<bool>(
+                    stream: _statusService.getOtherUserTypingStream(
+                      widget.chatId,
+                      widget.receiverId,
+                    ),
+                    builder: (context, typingSnap) {
+                      bool isTyping = typingSnap.data ?? false;
+
+                      return Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundImage: photo != null
+                                ? CachedNetworkImageProvider(photo)
+                                : null,
+                            child: photo == null
+                                ? const Icon(Icons.person)
+                                : null,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  name,
+                                  style: const TextStyle(fontSize: 16),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                                Text(
+                                  isTyping
+                                      ? "typing..."
+                                      : (isOnline ? "Online" : "Offline"),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: (isTyping || isOnline)
+                                        ? const Color(0xFFD9FDD3)
+                                        : Colors.white70,
+                                    fontWeight: isTyping
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    fontStyle: isTyping
+                                        ? FontStyle.italic
+                                        : FontStyle.normal,
+                                  ),
+                                ),
+                              ],
                             ),
-                            Text(
-                              isOnline ? "Online" : "Offline",
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.white70,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                          ),
+                        ],
+                      );
+                    },
                   );
                 },
               ),
@@ -643,39 +704,67 @@ class _ChatScreenState extends State<ChatScreen> {
                       );
                     } catch (_) {}
 
-                    return ChatBubble(
-                      docId: doc.id,
-                      data: data,
-                      isMe: data['senderId'] == myUid,
-                      decryptedText: decrypted,
-                      isSelected: _selectedIds.contains(doc.id),
-                      isSelectionMode: _isSelectionMode,
-                      currentlyPlayingUrl: _currentlyPlayingUrl,
-                      isHighlighted: _highlightedMessageId == doc.id,
-                      onPlayAudio: _playAudio,
-                      onLongPress: (id) {
-                        if (!_isSelectionMode)
-                          _showMessageOptions(
-                            id,
-                            data,
-                            data['senderId'] == myUid,
-                          );
-                      },
-                      onTap: (id) =>
-                          _isSelectionMode ? _toggleSelection(id) : null,
-                      onOpenGallery: (url, isVideo) {
-                        if (!isVideo) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  GalleryViewer(galleryItems: [url]),
-                            ),
-                          );
+                    // --- ADDED: DATE SEPARATOR LOGIC ---
+                    Widget? dateSeparator;
+                    if (index < _currentDocs.length - 1) {
+                      // Compare with the next message (which is older in time)
+                      final nextDoc = _currentDocs[index + 1];
+                      final nextData = nextDoc.data() as Map<String, dynamic>;
+
+                      Timestamp? currTs = data['timestamp'];
+                      Timestamp? nextTs = nextData['timestamp'];
+
+                      if (currTs != null && nextTs != null) {
+                        if (!_isSameDay(currTs.toDate(), nextTs.toDate())) {
+                          dateSeparator = _buildDateChip(currTs.toDate());
                         }
-                      },
-                      onReplyTap: (replyId) => _scrollToMessage(replyId),
-                      onRetry: (id) => {},
+                      }
+                    } else {
+                      // Oldest message (top of chat)
+                      Timestamp? currTs = data['timestamp'];
+                      if (currTs != null) {
+                        dateSeparator = _buildDateChip(currTs.toDate());
+                      }
+                    }
+
+                    return Column(
+                      children: [
+                        if (dateSeparator != null) dateSeparator,
+                        ChatBubble(
+                          docId: doc.id,
+                          data: data,
+                          isMe: data['senderId'] == myUid,
+                          decryptedText: decrypted,
+                          isSelected: _selectedIds.contains(doc.id),
+                          isSelectionMode: _isSelectionMode,
+                          currentlyPlayingUrl: _currentlyPlayingUrl,
+                          isHighlighted: _highlightedMessageId == doc.id,
+                          onPlayAudio: _playAudio,
+                          onLongPress: (id) {
+                            if (!_isSelectionMode)
+                              _showMessageOptions(
+                                id,
+                                data,
+                                data['senderId'] == myUid,
+                              );
+                          },
+                          onTap: (id) =>
+                              _isSelectionMode ? _toggleSelection(id) : null,
+                          onOpenGallery: (url, isVideo) {
+                            if (!isVideo) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      GalleryViewer(galleryItems: [url]),
+                                ),
+                              );
+                            }
+                          },
+                          onReplyTap: (replyId) => _scrollToMessage(replyId),
+                          onRetry: (id) => {},
+                        ),
+                      ],
                     );
                   },
                 );
