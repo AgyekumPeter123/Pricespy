@@ -104,7 +104,7 @@ flutter:
   assets:
     #   - images/a_dot_burr.jpeg
     #   - images/a_dot_ham.jpeg
-    - KEYS.env
+    - .env
     - assets/files/splash_anim.json
     - assets/files/Welcome.json
     - assets/files/Onboarding.json
