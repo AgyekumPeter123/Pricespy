@@ -66,7 +66,6 @@ class _AiConsultantPageState extends State<AiConsultantPage> {
     _scrollToBottom();
 
     // Context Preparation
-    final double rate = widget.predictionResult['rateUsed'] ?? 15.0;
     final bool isChurn = widget.predictionResult['willChurn'] ?? false;
     final double prob = widget.predictionResult['probability'] ?? 0.0;
     final inputs = widget.originalInputs;

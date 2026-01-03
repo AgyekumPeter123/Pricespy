@@ -18,15 +18,25 @@ class _LifeCycleManagerState extends State<LifeCycleManager>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initStatusService();
-  }
 
-  void _initStatusService() {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      _statusService = ChatStatusService(currentUserId: user.uid);
-      _statusService!.setUserOnline(true);
-    }
+    // 🟢 Listen to Auth Changes (Login/Logout)
+    // This ensures we track the CORRECT user if they switch accounts.
+    FirebaseAuth.instance.authStateChanges().listen((User? user) {
+      if (user != null) {
+        // User Logged In: Initialize Service & Set Online
+        setState(() {
+          _statusService = ChatStatusService(currentUserId: user.uid);
+        });
+        _statusService?.setUserOnline(true);
+        _statusService?.markAllAsDelivered();
+      } else {
+        // User Logged Out: Set Offline & Cleanup
+        _statusService?.setUserOnline(false);
+        setState(() {
+          _statusService = null;
+        });
+      }
+    });
   }
 
   @override
@@ -37,19 +47,18 @@ class _LifeCycleManagerState extends State<LifeCycleManager>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_statusService == null) {
-      // Re-init if user logged in after app started
-      _initStatusService();
-    }
+    // If no user is logged in, do nothing
+    if (_statusService == null) return;
 
-    if (_statusService != null) {
-      if (state == AppLifecycleState.resumed) {
-        _statusService!.setUserOnline(true);
-        _statusService!.markAllAsDelivered();
-      } else {
-        // Paused, Detached, or Inactive (User left the app entirely)
-        _statusService!.setUserOnline(false);
-      }
+    if (state == AppLifecycleState.resumed) {
+      // 🟢 App Opened / Came to Foreground -> ONLINE
+      _statusService!.setUserOnline(true);
+      _statusService!.markAllAsDelivered();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.inactive) {
+      // 🔴 App Minimized / Closed -> OFFLINE
+      _statusService!.setUserOnline(false);
     }
   }
 

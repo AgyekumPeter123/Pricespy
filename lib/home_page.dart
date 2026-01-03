@@ -39,7 +39,7 @@ class _HomePageState extends State<HomePage> {
     "Nearest Me",
     "Cheapest",
     "Shops Only",
-    "Market Finds",
+    "Individuals Only",
   ];
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
@@ -257,7 +257,9 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 🟢 FIXED: Restored the detailed Skeleton Loader
+  // ------------------------------------------------------------
+  // UPDATED: Modern Skeleton Loader to match new Card Appearance
+  // ------------------------------------------------------------
   Widget _buildSkeletonLoader() {
     return ListView.builder(
       itemCount: 4,
@@ -265,46 +267,66 @@ class _HomePageState extends State<HomePage> {
       itemBuilder: (context, index) {
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          height: 300,
+          height: 310, // Match new card height approx
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20), // Matches new card radius
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Image Placeholder
               Container(
-                height: 180,
+                height: 160,
                 decoration: BoxDecoration(
-                  color: Colors.grey[300],
+                  color: Colors.grey[200],
                   borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(16),
+                    top: Radius.circular(20),
                   ),
                 ),
               ),
-              // Text Placeholders
+              // Content Placeholder
               Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(height: 20, width: 150, color: Colors.grey[300]),
+                    // Title
+                    Container(height: 20, width: 180, color: Colors.grey[200]),
                     const SizedBox(height: 8),
-                    Container(height: 20, width: 100, color: Colors.grey[300]),
-                    const SizedBox(height: 10),
+                    // Location/Type
+                    Container(height: 14, width: 120, color: Colors.grey[200]),
+                    const SizedBox(height: 16),
+                    // Action Buttons Row
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Container(
-                          width: 60,
                           height: 30,
-                          color: Colors.grey[300],
+                          width: 60,
+                          color: Colors.grey[200],
                         ),
-                        const SizedBox(width: 20),
                         Container(
-                          width: 60,
                           height: 30,
-                          color: Colors.grey[300],
+                          width: 60,
+                          color: Colors.grey[200],
+                        ),
+                        Container(
+                          height: 30,
+                          width: 60,
+                          color: Colors.grey[200],
+                        ),
+                        Container(
+                          height: 30,
+                          width: 60,
+                          color: Colors.grey[200],
                         ),
                       ],
                     ),
@@ -513,7 +535,6 @@ class _HomePageState extends State<HomePage> {
               }
 
               // --- WAITING STATES ---
-              // If stream is null (ConnectionState.none) or waiting, show Skeleton
               if (snapshot.connectionState == ConnectionState.none ||
                   snapshot.connectionState == ConnectionState.waiting) {
                 return SliverFillRemaining(child: _buildSkeletonLoader());
@@ -584,7 +605,7 @@ class _HomePageState extends State<HomePage> {
                       (d) => (d.data() as Map)['poster_type'] == 'Shop Owner',
                     )
                     .toList();
-              } else if (_selectedFilter == "Market Finds") {
+              } else if (_selectedFilter == "Individuals Only") {
                 docs = docs
                     .where(
                       (d) => (d.data() as Map)['poster_type'] == 'Individual',
@@ -616,7 +637,28 @@ class _HomePageState extends State<HomePage> {
                 return distA.compareTo(distB);
               });
 
-              // 📊 Calculate Stats for Chart
+              // 🟢 PRE-CACHE IMAGES FOR BETTER PERFORMANCE
+              // Cache all post images and shop front images to ensure instant loading in product details
+              for (var doc in docs) {
+                final data = doc.data() as Map<String, dynamic>;
+                final imageUrl = data['image_url'] as String?;
+                final shopFrontUrl = data['shop_front_image_url'] as String?;
+
+                if (imageUrl != null && imageUrl.isNotEmpty) {
+                  // Pre-cache main product image
+                  precacheImage(CachedNetworkImageProvider(imageUrl), context);
+                }
+
+                if (shopFrontUrl != null && shopFrontUrl.isNotEmpty) {
+                  // Pre-cache shop front image
+                  precacheImage(
+                    CachedNetworkImageProvider(shopFrontUrl),
+                    context,
+                  );
+                }
+              }
+
+              // Stats for Chart
               int shopCount = 0;
               int indCount = 0;
               for (var doc in docs) {
@@ -633,13 +675,21 @@ class _HomePageState extends State<HomePage> {
                 );
               }
 
+              // --------------------------------------------------------
+              // LOGIC: Chart only for "Nearest Me" and "Cheapest"
+              // --------------------------------------------------------
+              bool showChart =
+                  (_selectedFilter == "Nearest Me" ||
+                  _selectedFilter == "Cheapest");
+
               return SliverList(
                 delegate: SliverChildBuilderDelegate((context, index) {
-                  // 🟢 INSERT CHART AT THE TOP
+                  // IF index is 0, we conditionally show the chart + the first card
                   if (index == 0) {
                     return Column(
                       children: [
-                        _buildMarketOverviewChart(shopCount, indCount),
+                        if (showChart)
+                          _buildMarketOverviewChart(shopCount, indCount),
                         IntelCard(
                           key: ValueKey(docs[0].id),
                           data: docs[0].data() as Map<String, dynamic>,
@@ -677,6 +727,10 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+// ---------------------------------------------------------------------
+// MODERNIZED CARD WIDGET
+// Features: Pixel overflow protection, clean layout, modern styling
+// ---------------------------------------------------------------------
 class IntelCard extends StatelessWidget {
   final Map<String, dynamic> data;
   final String docId;
@@ -825,7 +879,7 @@ class IntelCard extends StatelessWidget {
 
   void _openMap(BuildContext context, double lat, double lng) => _launchURL(
     context,
-    "https://www.google.com/maps/search/?api=1&query=$lat,$lng",
+    "http://googleusercontent.com/maps.google.com/?q=$lat,$lng",
   );
 
   void _openWhatsApp(BuildContext context, String phone) {
@@ -855,6 +909,20 @@ class IntelCard extends StatelessWidget {
     double lat = (data['latitude'] ?? 0).toDouble();
     double lng = (data['longitude'] ?? 0).toDouble();
 
+    // Distance Calculation (if user position exists)
+    String distanceString = "";
+    if (userPosition != null && lat != 0 && lng != 0) {
+      double dist = Geolocator.distanceBetween(
+        userPosition!.latitude,
+        userPosition!.longitude,
+        lat,
+        lng,
+      );
+      distanceString = dist > 1000
+          ? "${(dist / 1000).toStringAsFixed(1)} km away"
+          : "${dist.round()} m away";
+    }
+
     return InkWell(
       onTap: () => Navigator.push(
         context,
@@ -865,122 +933,212 @@ class IntelCard extends StatelessWidget {
       ),
       onLongPress: () =>
           _showLongPressOptions(context, data['uploader_id'] ?? ''),
-      child: Card(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.15),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
         child: Column(
           children: [
+            // 1. IMAGE SECTION (Fixed Height)
             Stack(
               children: [
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(16),
+                    top: Radius.circular(20),
                   ),
-                  child: imageUrl.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: imageUrl,
-                          height: 180,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) =>
-                              Container(height: 180, color: Colors.grey[300]),
-                          errorWidget: (context, url, error) => Container(
-                            height: 180,
-                            color: Colors.grey[300],
-                            child: const Icon(Icons.broken_image),
+                  child: Container(
+                    height: 160,
+                    width: double.infinity,
+                    color: Colors.grey[100],
+                    child: imageUrl.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: imageUrl,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Center(
+                              child: Icon(
+                                Icons.image,
+                                color: Colors.grey[300],
+                                size: 50,
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => const Center(
+                              child: Icon(
+                                Icons.broken_image,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          )
+                        : const Center(
+                            child: Icon(
+                              Icons.image_not_supported,
+                              color: Colors.grey,
+                            ),
                           ),
-                        )
-                      : Container(height: 180, color: Colors.grey[300]),
+                  ),
                 ),
+                // Favorite Button Overlay
                 Positioned(
-                  top: 5,
-                  right: 5,
-                  child: StreamBuilder<DocumentSnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(userUid)
-                        .collection('saved')
-                        .doc(docId)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      bool isSaved = snapshot.hasData && snapshot.data!.exists;
-                      return IconButton(
-                        icon: Icon(
-                          isSaved ? Icons.favorite : Icons.favorite_border,
-                          color: isSaved ? Colors.red : Colors.white,
-                          size: 28,
-                        ),
-                        onPressed: () => _toggleSave(context, isSaved),
-                      );
-                    },
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.3),
+                      shape: BoxShape.circle,
+                    ),
+                    child: StreamBuilder<DocumentSnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(userUid)
+                          .collection('saved')
+                          .doc(docId)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        bool isSaved =
+                            snapshot.hasData && snapshot.data!.exists;
+                        return InkWell(
+                          onTap: () => _toggleSave(context, isSaved),
+                          child: Icon(
+                            isSaved ? Icons.favorite : Icons.favorite_border,
+                            color: isSaved ? Colors.redAccent : Colors.white,
+                            size: 22,
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ],
             ),
+
+            // 2. CONTENT SECTION
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Row: Title + Price (Handles overflow)
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
+                        flex: 3,
                         child: Text(
                           name,
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
+                            height: 1.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          NumberFormat.currency(symbol: 'GH₵').format(price),
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.green[800],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Location & Type Row
+                  Row(
+                    children: [
+                      Icon(
+                        type == 'Shop Owner'
+                            ? Icons.store_mall_directory
+                            : Icons.person,
+                        size: 14,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          type,
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      Text(
-                        NumberFormat.currency(symbol: '₵').format(price),
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green[800],
+                      if (distanceString.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Icon(
+                            Icons.circle,
+                            size: 4,
+                            color: Colors.grey,
+                          ),
                         ),
-                      ),
+                        Icon(
+                          Icons.location_on,
+                          size: 14,
+                          color: Colors.grey[600],
+                        ),
+                        const SizedBox(width: 2),
+                        Flexible(
+                          child: Text(
+                            distanceString,
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 12,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(
-                        type == 'Shop Owner' ? Icons.store : Icons.person,
-                        size: 14,
-                        color: Colors.grey,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        type,
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
+
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Divider(height: 1),
                   ),
-                  const SizedBox(height: 10),
+
+                  // 3. ACTION BUTTONS (Distributed evenly)
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _actionBtn(
                         context,
-                        Icons.phone,
+                        Icons.call,
                         "Call",
                         Colors.green,
+                        Colors.green[50]!,
                         () => _launchURL(context, "tel:$phone"),
                       ),
                       _actionBtn(
                         context,
                         FontAwesomeIcons.whatsapp,
-                        "WhatsApp",
+                        "Chat",
                         Colors.teal,
+                        Colors.teal[50]!,
                         () => _openWhatsApp(context, whatsapp),
                       ),
+                      // Comment Button with Counter
                       StreamBuilder<QuerySnapshot>(
                         stream: FirebaseFirestore.instance
                             .collection('posts')
@@ -993,64 +1151,45 @@ class IntelCard extends StatelessWidget {
                               : 0;
                           return InkWell(
                             onTap: () => _openComments(context),
-                            child: Column(
-                              children: [
-                                Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    const Icon(
-                                      Icons.comment,
-                                      color: Colors.orange,
-                                      size: 20,
-                                    ),
-                                    if (count > 0)
-                                      Positioned(
-                                        top: -8,
-                                        right: -8,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 4,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey[600],
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                            border: Border.all(
-                                              color: Colors.white,
-                                              width: 1.5,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            count.toString(),
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                const Text(
-                                  "Comment",
-                                  style: TextStyle(
-                                    color: Colors.orange,
-                                    fontSize: 11,
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.orange[50],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.comment_outlined,
+                                    size: 16,
+                                    color: Colors.orange[800],
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    // 🟢 FIX: Always show count (even "0") so button size is consistent
+                                    count.toString(),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.orange[800],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           );
                         },
                       ),
                       _actionBtn(
                         context,
-                        Icons.map,
+                        Icons.directions,
                         "Map",
                         Colors.blue,
+                        Colors.blue[50]!,
                         () => _openMap(context, lat, lng),
                       ),
                     ],
@@ -1068,16 +1207,33 @@ class IntelCard extends StatelessWidget {
     BuildContext context,
     IconData icon,
     String label,
-    Color color,
+    Color iconColor,
+    Color bgColor,
     VoidCallback onTap,
   ) {
     return InkWell(
       onTap: onTap,
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 20),
-          Text(label, style: TextStyle(color: color, fontSize: 11)),
-        ],
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: iconColor),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: iconColor,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

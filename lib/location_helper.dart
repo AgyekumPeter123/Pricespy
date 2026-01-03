@@ -11,9 +11,8 @@ class LocationHelper {
     // Check if GPS hardware is turned on
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      return Future.error(
-        'Location services are disabled. Please turn on your GPS.',
-      );
+      // 🟢 FIX: Return null instead of error so app continues without location
+      return null;
     }
 
     // Check Permissions
@@ -21,15 +20,16 @@ class LocationHelper {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        return Future.error('Location permissions are denied.');
+        // 🟢 FIX: Permission denied, return null to allow app to proceed
+        return null;
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      // Logic: Tell user they must enable it in phone settings
-      return Future.error(
-        'Location permissions are permanently denied. Please enable them in your phone settings.',
-      );
+      // 🟢 FIX: Handle permanent denial gracefully
+      // Ideally, the UI should check this null and show a "Open Settings" button,
+      // but returning null here prevents the app from crashing/stuck loading.
+      return null;
     }
 
     // Get the actual position
@@ -41,7 +41,8 @@ class LocationHelper {
         ), // Prevent infinite loading if GPS is weak
       );
     } catch (e) {
-      // Fallback to last known position if current fetch fails
+      // 🟢 FIX: Fallback to last known position if current fetch fails/times out
+      debugPrint("Error fetching precise location: $e. Trying last known.");
       return await Geolocator.getLastKnownPosition();
     }
   }

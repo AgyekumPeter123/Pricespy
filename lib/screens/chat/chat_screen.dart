@@ -14,6 +14,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/chat_service.dart';
+import '../../services/connectivity_service.dart';
 import '../../services/chat_status_service.dart';
 import '../../encryption_service.dart';
 import '../../MediaPreviewScreen.dart';
@@ -171,10 +172,20 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    // 🟢 RESOURCE CLEANUP (Memory Leak Fix)
     _statusService.dispose();
     _textController.dispose();
+
+    // Stop recording if active before closing
+    if (_audioRecorder.isRecording) {
+      _audioRecorder.stopRecorder();
+    }
     _audioRecorder.closeRecorder();
+
+    // Stop playing if active
+    _audioPlayer.stop();
     _audioPlayer.dispose();
+
     _recordTimer?.cancel();
     super.dispose();
   }
@@ -404,12 +415,28 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         );
         if (result != null) {
-          _chatService.sendMediaMessage(
-            result['file'],
-            'image',
-            caption: result['caption'],
-            replyMessage: _replyMessage,
-          );
+          // 🟢 INTERNET CONNECTIVITY CHECK
+          final connectivityService = ConnectivityService();
+          if (!await connectivityService.checkAndShowConnectivity(context)) {
+            return;
+          }
+
+          try {
+            await _chatService.sendMediaMessage(
+              result['file'],
+              'image',
+              caption: result['caption'],
+              replyMessage: _replyMessage,
+            );
+          } catch (e) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("Failed to send image: $e"),
+                backgroundColor: Colors.red.shade700,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
         }
       }
     } else if (type == 'video') {
@@ -429,12 +456,28 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           );
           if (result != null) {
-            _chatService.sendMediaMessage(
-              result['file'],
-              'video',
-              caption: result['caption'],
-              replyMessage: _replyMessage,
-            );
+            // 🟢 INTERNET CONNECTIVITY CHECK
+            final connectivityService = ConnectivityService();
+            if (!await connectivityService.checkAndShowConnectivity(context)) {
+              return;
+            }
+
+            try {
+              await _chatService.sendMediaMessage(
+                result['file'],
+                'video',
+                caption: result['caption'],
+                replyMessage: _replyMessage,
+              );
+            } catch (e) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text("Failed to send video: $e"),
+                  backgroundColor: Colors.red.shade700,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
           }
         }
       }
@@ -469,11 +512,27 @@ class _ChatScreenState extends State<ChatScreen> {
       _recordDuration = "00:00";
     });
     if (send && path != null) {
-      _chatService.sendMediaMessage(
-        File(path),
-        'audio',
-        replyMessage: _replyMessage,
-      );
+      // 🟢 INTERNET CONNECTIVITY CHECK
+      final connectivityService = ConnectivityService();
+      if (!await connectivityService.checkAndShowConnectivity(context)) {
+        return;
+      }
+
+      try {
+        await _chatService.sendMediaMessage(
+          File(path),
+          'audio',
+          replyMessage: _replyMessage,
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to send audio: $e"),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -762,7 +821,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             }
                           },
                           onReplyTap: (replyId) => _scrollToMessage(replyId),
-                          onRetry: (id) => {},
+                          onRetry: (id) {},
                         ),
                       ],
                     );
@@ -807,10 +866,28 @@ class _ChatScreenState extends State<ChatScreen> {
             onStopRecording: _stopRecording,
             onLockRecording: () => setState(() => _isRecorderLocked = true),
             onCancelRecording: () => _stopRecording(false),
-            onSendMessage: (txt) {
-              _chatService.sendTextMessage(txt, _replyMessage);
-              _textController.clear();
-              setState(() => _replyMessage = null);
+            onSendMessage: (txt) async {
+              // 🟢 INTERNET CONNECTIVITY CHECK
+              final connectivityService = ConnectivityService();
+              if (!await connectivityService.checkAndShowConnectivity(
+                context,
+              )) {
+                return;
+              }
+
+              try {
+                await _chatService.sendTextMessage(txt, _replyMessage);
+                _textController.clear();
+                setState(() => _replyMessage = null);
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text("Failed to send message: $e"),
+                    backgroundColor: Colors.red.shade700,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
             },
             onTyping: (val) =>
                 _statusService.setTypingStatus(widget.chatId, val.isNotEmpty),

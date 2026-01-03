@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'services/connectivity_service.dart';
 
 class CommentSheet extends StatefulWidget {
   final String postId;
@@ -19,21 +20,19 @@ class CommentSheet extends StatefulWidget {
 }
 
 class _CommentSheetState extends State<CommentSheet> {
-  // Controller for the Main Bottom Input (New Root Comments)
   final TextEditingController _mainCommentController = TextEditingController();
-
-  // Controller for the Inline Reply Input
   final TextEditingController _replyController = TextEditingController();
   final FocusNode _replyFocusNode = FocusNode();
-
   final User? user = FirebaseAuth.instance.currentUser;
   bool _isSending = false;
 
   // --- STATE FOR INLINE REPLY ---
-  String? _activeCommentId; // Which comment is currently open?
+  String? _activeCommentId;
   String? _taggedUserName;
-  // We need to know which parent ID to link the reply to
   String? _replyToParentId;
+
+  // --- 🟢 NEW: TRACK EXPANDED THREADS ---
+  final Set<String> _expandedParentIds = {};
 
   @override
   void dispose() {
@@ -43,9 +42,24 @@ class _CommentSheetState extends State<CommentSheet> {
     super.dispose();
   }
 
-  // --- LOGIC 1: POST NEW ROOT COMMENT (Bottom Bar) ---
+  // --- LOGIC: TOGGLE REPLIES ---
+  void _toggleReplies(String parentId) {
+    setState(() {
+      if (_expandedParentIds.contains(parentId)) {
+        _expandedParentIds.remove(parentId);
+      } else {
+        _expandedParentIds.add(parentId);
+      }
+    });
+  }
+
+  // --- LOGIC 1: POST NEW ROOT COMMENT ---
   Future<void> _postRootComment() async {
     if (_mainCommentController.text.trim().isEmpty) return;
+
+    final connectivityService = ConnectivityService();
+    if (!await connectivityService.checkAndShowConnectivity(context)) return;
+
     setState(() => _isSending = true);
 
     try {
@@ -59,7 +73,7 @@ class _CommentSheetState extends State<CommentSheet> {
             'username': user?.displayName ?? "Anonymous",
             'avatar': user?.photoURL,
             'timestamp': FieldValue.serverTimestamp(),
-            'replyToId': null, // Explicitly null for root comments
+            'replyToId': null, // Explicitly null for root
           });
 
       await FirebaseFirestore.instance
@@ -80,6 +94,9 @@ class _CommentSheetState extends State<CommentSheet> {
   Future<void> _sendInlineReply(String text) async {
     if (text.trim().isEmpty || _replyToParentId == null) return;
 
+    final connectivityService = ConnectivityService();
+    if (!await connectivityService.checkAndShowConnectivity(context)) return;
+
     try {
       await FirebaseFirestore.instance
           .collection('posts')
@@ -92,14 +109,18 @@ class _CommentSheetState extends State<CommentSheet> {
             'avatar': user?.photoURL,
             'timestamp': FieldValue.serverTimestamp(),
             'tagged_user': _taggedUserName,
-            'replyToId':
-                _replyToParentId, // Links this reply to the parent comment
+            'replyToId': _replyToParentId,
           });
 
       await FirebaseFirestore.instance
           .collection('posts')
           .doc(widget.postId)
           .update({'last_comment_time': FieldValue.serverTimestamp()});
+
+      // 🟢 Auto-expand the thread if I reply
+      if (_replyToParentId != null) {
+        _expandedParentIds.add(_replyToParentId!);
+      }
 
       _cancelReply();
     } catch (e) {
@@ -136,9 +157,7 @@ class _CommentSheetState extends State<CommentSheet> {
             .doc(commentId)
             .delete();
 
-        if (_activeCommentId == commentId) {
-          _cancelReply();
-        }
+        if (_activeCommentId == commentId) _cancelReply();
       } catch (e) {
         debugPrint("Error deleting: $e");
       }
@@ -148,10 +167,14 @@ class _CommentSheetState extends State<CommentSheet> {
   // --- LOGIC 4: ACTIVATE REPLY BOX ---
   void _activateReplyBox(String commentId, String userName, String parentId) {
     setState(() {
-      _activeCommentId = commentId; // The specific comment UI we clicked
+      _activeCommentId = commentId;
       _taggedUserName = userName;
-      _replyToParentId = parentId; // The ID of the top-level comment
+      _replyToParentId = parentId;
       _replyController.clear();
+      // 🟢 Auto-expand if clicking reply on a root
+      if (!_expandedParentIds.contains(parentId)) {
+        _expandedParentIds.add(parentId);
+      }
     });
 
     Future.delayed(const Duration(milliseconds: 100), () {
@@ -226,7 +249,7 @@ class _CommentSheetState extends State<CommentSheet> {
                   );
                 }
 
-                // Separate Roots and Replies
+                // 1. Filter Roots
                 final topLevelComments = allDocs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
                   return data['replyToId'] == null;
@@ -239,28 +262,64 @@ class _CommentSheetState extends State<CommentSheet> {
                     final parentDoc = topLevelComments[index];
                     final parentId = parentDoc.id;
 
-                    // Find Replies
+                    // 2. Filter Replies for this specific root
                     final replies = allDocs.where((doc) {
                       final data = doc.data() as Map<String, dynamic>;
                       return data['replyToId'] == parentId;
                     }).toList();
 
+                    // 🟢 CHECK STATE
+                    final bool isExpanded = _expandedParentIds.contains(
+                      parentId,
+                    );
+
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // ROOT COMMENT
                         _buildCommentItem(
                           parentDoc,
                           isReply: false,
                           rootId: parentId,
                         ),
 
-                        // UI MOD: Indented Replies with Vertical Thread Line
+                        // 🟢 TIKTOK STYLE EXPANDER BUTTON
                         if (replies.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 50, bottom: 8),
+                            child: Row(
+                              children: [
+                                // Horizontal Line
+                                Container(
+                                  width: 30,
+                                  height: 1,
+                                  color: Colors.grey[300],
+                                  margin: const EdgeInsets.only(right: 10),
+                                ),
+                                GestureDetector(
+                                  onTap: () => _toggleReplies(parentId),
+                                  child: Text(
+                                    isExpanded
+                                        ? "Hide replies"
+                                        : "View ${replies.length} replies",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        // REPLIES SECTION (Conditionally Visible)
+                        if (replies.isNotEmpty && isExpanded)
                           IntrinsicHeight(
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // The Thread Line
+                                // Thread Line
                                 Padding(
                                   padding: const EdgeInsets.only(left: 34),
                                   child: VerticalDivider(
@@ -269,9 +328,10 @@ class _CommentSheetState extends State<CommentSheet> {
                                     color: Colors.grey.withOpacity(0.2),
                                   ),
                                 ),
-                                // The Replies
+                                // Replies List
                                 Expanded(
                                   child: Padding(
+                                    // 🟢 FIX: Clamped Padding (Flat nesting)
                                     padding: const EdgeInsets.only(left: 14.0),
                                     child: Column(
                                       children: replies
@@ -310,7 +370,7 @@ class _CommentSheetState extends State<CommentSheet> {
                     child: TextField(
                       controller: _mainCommentController,
                       minLines: 1,
-                      maxLines: 4, // UI MOD: Smart expansion
+                      maxLines: 4,
                       textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
                         hintText: "Add a comment...",
@@ -365,11 +425,8 @@ class _CommentSheetState extends State<CommentSheet> {
     final commentId = doc.id;
     final bool isMe = data['uid'] == user?.uid;
     final bool isOwner = data['uid'] == widget.postOwnerId;
-
-    // Check if the reply box is open specifically for THIS comment
     final bool isReplyingToThis = _activeCommentId == commentId;
 
-    // UI MOD: Animated Highlight
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       color: isReplyingToThis
@@ -410,7 +467,6 @@ class _CommentSheetState extends State<CommentSheet> {
                               color: isReply ? Colors.grey[800] : Colors.black,
                             ),
                           ),
-                          // UI MOD: Verified Icon for Owner
                           if (isOwner)
                             const Padding(
                               padding: EdgeInsets.only(left: 4.0),
@@ -430,8 +486,6 @@ class _CommentSheetState extends State<CommentSheet> {
                           ),
                         ],
                       ),
-
-                      // Content
                       const SizedBox(height: 2),
                       Wrap(
                         children: [
@@ -450,8 +504,6 @@ class _CommentSheetState extends State<CommentSheet> {
                           ),
                         ],
                       ),
-
-                      // Action Buttons (Reply / Delete)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Row(
@@ -499,10 +551,12 @@ class _CommentSheetState extends State<CommentSheet> {
             ),
           ),
 
-          // INLINE REPLY INPUT BOX (Only shows if this specific comment was clicked)
+          // INLINE REPLY BOX
           if (isReplyingToThis)
             Container(
-              margin: const EdgeInsets.only(left: 46, bottom: 10),
+              // 🟢 FIX: Smart margin. If already replying to a reply, use 0 margin
+              // so it aligns with the current thread column.
+              margin: EdgeInsets.only(left: isReply ? 0 : 46, bottom: 10),
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Colors.grey[50],
@@ -540,7 +594,7 @@ class _CommentSheetState extends State<CommentSheet> {
                           controller: _replyController,
                           focusNode: _replyFocusNode,
                           minLines: 1,
-                          maxLines: 3, // UI MOD: Smart expansion
+                          maxLines: 3,
                           textCapitalization: TextCapitalization.sentences,
                           decoration: const InputDecoration(
                             hintText: "Type reply...",

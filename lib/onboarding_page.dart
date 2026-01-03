@@ -26,14 +26,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
           "Snap a photo and our AI instantly reads the text on the image—like brand names or price tags—to fill in details for you.",
       "icon": Icons.document_scanner_rounded,
     },
-    // --- UPDATED SECTION ---
     {
       "title": "AI Consultant & Retention",
       "desc":
           "Predict churn risks and chat directly with our AI Consultant for personalized business advice to save your customers.",
       "icon": Icons.psychology_alt,
     },
-    // -----------------------
     {
       "title": "Private & Secure Chat",
       "desc":
@@ -51,6 +49,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
       "desc":
           "Looking for a deal? Set a 'Watch' on an item and get notified when it appears nearby.",
       "icon": Icons.radar,
+    },
+
+    {
+      "title": "Community Safety",
+      "desc":
+          "Spot something unusual? Report posts directly from the product details page, or report suspicious activity via the Safety & Terms page for immediate admin action.",
+      "icon": Icons.security,
     },
   ];
 

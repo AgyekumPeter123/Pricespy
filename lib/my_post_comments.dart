@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:intl/intl.dart';
 import 'sidebar_drawer.dart';
 
 class MyPostCommentsPage extends StatefulWidget {
@@ -127,7 +128,47 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
   String? _activeCommentId;
   String? _taggedUserName;
   String? _taggedUserId;
-  bool _isSending = false; // Added to prevent double taps
+  // This helps us expand the correct root thread after replying
+  String? _activeRootId;
+  bool _isSending = false;
+
+  final Set<String> _expandedParentIds = {};
+
+  // --- RECURSIVE THREAD BUILDER ---
+  List<DocumentSnapshot> _getDescendants(
+    String parentId,
+    Map<String, List<DocumentSnapshot>> commentsByParent,
+  ) {
+    List<DocumentSnapshot> descendants = [];
+    final children = commentsByParent[parentId];
+
+    if (children != null) {
+      // Sort children by timestamp to keep conversation order
+      children.sort((a, b) {
+        final ta = (a.data() as Map)['timestamp'] as Timestamp?;
+        final tb = (b.data() as Map)['timestamp'] as Timestamp?;
+        if (ta == null || tb == null) return 0;
+        return ta.compareTo(tb);
+      });
+
+      for (var child in children) {
+        descendants.add(child);
+        // Recursively get children of this child
+        descendants.addAll(_getDescendants(child.id, commentsByParent));
+      }
+    }
+    return descendants;
+  }
+
+  void _toggleReplies(String parentId) {
+    setState(() {
+      if (_expandedParentIds.contains(parentId)) {
+        _expandedParentIds.remove(parentId);
+      } else {
+        _expandedParentIds.add(parentId);
+      }
+    });
+  }
 
   Future<void> _sendReply(String text) async {
     if (text.trim().isEmpty || _activeCommentId == null || _isSending) return;
@@ -164,7 +205,7 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
             .doc(_taggedUserId)
             .collection('notifications')
             .add({
-              'type': 'reply', // IMPORTANT: this type helps separate badges
+              'type': 'reply',
               'post_id': widget.postId,
               'message':
                   'The seller replied to your comment on "${widget.postData['product_name']}"',
@@ -173,9 +214,14 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
             });
       }
 
-      // 4. Success UI Updates
+      // 4. Auto-Expand the thread we just replied to
+      if (_activeRootId != null) {
+        _expandedParentIds.add(_activeRootId!);
+      }
+
+      // 5. Success UI Updates
       if (mounted) {
-        _cancelReply(); // Clears field and closes box
+        _cancelReply();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Reply sent!"),
@@ -245,12 +291,23 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
     }
   }
 
-  void _activateReplyBox(String commentId, String userId, String userName) {
+  void _activateReplyBox(
+    String commentId,
+    String userId,
+    String userName,
+    String rootId,
+  ) {
     setState(() {
       _activeCommentId = commentId;
       _taggedUserId = userId;
       _taggedUserName = userName;
+      _activeRootId = rootId;
       _replyController.clear();
+
+      // Auto expand the thread so we can see what we are replying to
+      if (!_expandedParentIds.contains(rootId)) {
+        _expandedParentIds.add(rootId);
+      }
     });
     Future.delayed(const Duration(milliseconds: 100), () {
       _replyFocusNode.requestFocus();
@@ -262,7 +319,8 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
       _activeCommentId = null;
       _taggedUserId = null;
       _taggedUserName = null;
-      _replyController.clear(); // Clears the text
+      _activeRootId = null;
+      _replyController.clear();
     });
     _replyFocusNode.unfocus();
   }
@@ -295,10 +353,22 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
           if (!snapshot.hasData) return const SizedBox();
           final allDocs = snapshot.data!.docs;
 
-          final rootComments = allDocs.where((doc) {
-            final d = doc.data() as Map<String, dynamic>;
-            return d['replyToId'] == null;
-          }).toList();
+          // 1. Group comments by parent for efficient recursion
+          Map<String, List<DocumentSnapshot>> commentsByParent = {};
+          List<DocumentSnapshot> rootComments = [];
+
+          for (var doc in allDocs) {
+            final data = doc.data() as Map<String, dynamic>;
+            final parentId = data['replyToId'];
+            if (parentId == null) {
+              rootComments.add(doc);
+            } else {
+              if (!commentsByParent.containsKey(parentId)) {
+                commentsByParent[parentId] = [];
+              }
+              commentsByParent[parentId]!.add(doc);
+            }
+          }
 
           return ExpansionTile(
             leading: ClipRRect(
@@ -351,21 +421,86 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
                           final rootDoc = rootComments[i];
                           final rootId = rootDoc.id;
 
-                          final replies = allDocs.where((doc) {
-                            final d = doc.data() as Map<String, dynamic>;
-                            return d['replyToId'] == rootId;
-                          }).toList();
+                          // RECURSIVELY GET ALL DESCENDANTS
+                          final allDescendants = _getDescendants(
+                            rootId,
+                            commentsByParent,
+                          );
+                          final bool isExpanded = _expandedParentIds.contains(
+                            rootId,
+                          );
 
                           return Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              _buildCommentItem(rootDoc, isReply: false),
-                              ...replies.map(
-                                (r) => Padding(
-                                  padding: const EdgeInsets.only(left: 35),
-                                  child: _buildCommentItem(r, isReply: true),
-                                ),
+                              // ROOT COMMENT
+                              _buildCommentItem(
+                                rootDoc,
+                                isReply: false,
+                                rootId: rootId,
                               ),
+
+                              // TIKTOK STYLE EXPANDER
+                              if (allDescendants.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    left: 50,
+                                    bottom: 8,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 30,
+                                        height: 1,
+                                        color: Colors.grey[300],
+                                        margin: const EdgeInsets.only(
+                                          right: 10,
+                                        ),
+                                      ),
+                                      GestureDetector(
+                                        onTap: () => _toggleReplies(rootId),
+                                        child: Text(
+                                          isExpanded
+                                              ? "Hide replies"
+                                              : "View ${allDescendants.length} replies",
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                              // NESTED REPLIES (Shown if expanded)
+                              if (allDescendants.isNotEmpty && isExpanded)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 34),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      border: Border(
+                                        left: BorderSide(
+                                          color: Colors.grey.withOpacity(0.2),
+                                          width: 2,
+                                        ),
+                                      ),
+                                    ),
+                                    padding: const EdgeInsets.only(left: 14.0),
+                                    child: Column(
+                                      children: allDescendants
+                                          .map(
+                                            (r) => _buildCommentItem(
+                                              r,
+                                              isReply: true,
+                                              rootId: rootId,
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                  ),
+                                ),
                               const Divider(height: 1),
                             ],
                           );
@@ -379,7 +514,12 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
     );
   }
 
-  Widget _buildCommentItem(QueryDocumentSnapshot doc, {required bool isReply}) {
+  // 🟢 FIXED: Variable name cData matched with timestamp extraction
+  Widget _buildCommentItem(
+    DocumentSnapshot doc, {
+    required bool isReply,
+    required String rootId,
+  }) {
     final cData = doc.data() as Map<String, dynamic>;
     final commentId = doc.id;
     final bool isMe = cData['uid'] == widget.currentUser.uid;
@@ -391,6 +531,7 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
       children: [
         ListTile(
           dense: true,
+          contentPadding: EdgeInsets.zero,
           leading: CircleAvatar(
             backgroundColor: isMe ? Colors.green[100] : Colors.blue[100],
             radius: 14,
@@ -435,6 +576,7 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
                     commentId,
                     cData['uid'] ?? '',
                     senderName,
+                    rootId,
                   ),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
@@ -469,9 +611,22 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
                   ),
                 ),
         ),
+        // 🟢 FIXED: Correctly calling _formatTime with cData
+        Padding(
+          padding: const EdgeInsets.only(left: 56, bottom: 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              _formatTime(cData['timestamp']),
+              style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+            ),
+          ),
+        ),
+
         if (isReplyingToThis)
           Container(
-            margin: const EdgeInsets.only(left: 20, right: 10, bottom: 10),
+            // 🟢 SMART MARGIN: Keeps input aligned with text
+            margin: EdgeInsets.only(left: isReply ? 0 : 46, bottom: 10),
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.white,
@@ -542,5 +697,22 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
           ),
       ],
     );
+  }
+
+  String _formatTime(Timestamp? timestamp) {
+    if (timestamp == null) return "Just now";
+    final dt = timestamp.toDate();
+    final diff = DateTime.now().difference(dt);
+    if (diff.inDays > 7) {
+      return DateFormat.MMMd().format(dt);
+    } else if (diff.inDays > 0) {
+      return "${diff.inDays}d";
+    } else if (diff.inHours > 0) {
+      return "${diff.inHours}h";
+    } else if (diff.inMinutes > 0) {
+      return "${diff.inMinutes}m";
+    } else {
+      return "now";
+    }
   }
 }

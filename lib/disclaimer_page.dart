@@ -1,8 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart'; // 🟢 Added for email launching
 import 'sidebar_drawer.dart';
 
 class DisclaimerPage extends StatelessWidget {
   const DisclaimerPage({super.key});
+
+  // 🟢 NEW: Logic to open email
+  Future<void> _contactSupport(BuildContext context) async {
+    final Uri emailLaunchUri = Uri(
+      scheme: 'mailto',
+      path: 'agyekumpeter123@gmail.com',
+      query:
+          'subject=Report: Unusual Activity&body=Please describe the issue here:%0A%0A(Attaching evidence/screenshots solidifies reports and ensures quick action.)',
+    );
+
+    try {
+      if (!await launchUrl(
+        emailLaunchUri,
+        mode: LaunchMode.externalApplication,
+      )) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Could not open email app.")),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Error launching email: $e");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +99,6 @@ class DisclaimerPage extends StatelessWidget {
               color: Colors.purple,
             ),
 
-            // --- UPDATED SECTION FOR AI CONSULTANT ---
             _buildSafetySection(
               title: "AI Advice & Predictions",
               content:
@@ -82,7 +107,6 @@ class DisclaimerPage extends StatelessWidget {
               color: Colors.indigo,
             ),
 
-            // -----------------------------------------
             _buildSafetySection(
               title: "Verified by Camera",
               content:
@@ -105,6 +129,79 @@ class DisclaimerPage extends StatelessWidget {
                   "If you spot a scam or fake price, report it immediately. Our admin team investigates every report to keep the community safe.",
               icon: Icons.gavel_rounded,
               color: Colors.teal,
+            ),
+
+            // 🟢 NEW: Direct Reporting Section
+            Padding(
+              padding: const EdgeInsets.only(bottom: 25),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.blueGrey.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.support_agent,
+                      color: Colors.blueGrey,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Direct Reporting",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              "For other unusual reports, users can directly make reports via the ",
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[700],
+                                height: 1.5,
+                              ),
+                            ),
+                            InkWell(
+                              onTap: () => _contactSupport(context),
+                              child: Text(
+                                "Support Team.",
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue[800],
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: Colors.blue[800],
+                                  height: 1.5,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              "Adding evidence solidifies reports and ensures quick actions.",
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[700],
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
 
             const SizedBox(height: 30),

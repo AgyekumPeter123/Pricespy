@@ -4,13 +4,20 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
-import 'package:fl_chart/fl_chart.dart'; // 🟢 Ensure fl_chart: ^0.66.0 is in pubspec.yaml
+import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 // Project specific imports
 import 'product_details_page.dart';
 import 'sidebar_drawer.dart';
 import 'screens/chat/chat_screen.dart';
 import 'encryption_service.dart';
+import 'services/post_service.dart';
+import 'admin_posts_tab.dart';
+import 'admin_user_posts_page.dart';
+import 'admin_service.dart'; // 🟢 Added for AdminService
+
+enum UserFilter { all, active, restricted }
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -24,15 +31,26 @@ class _AdminDashboardState extends State<AdminDashboard>
   late TabController _tabController;
   final TextEditingController _userSearchController = TextEditingController();
   String _userSearchQuery = "";
+  UserFilter _currentUserFilter = UserFilter.all;
 
   // Admin Config
-  final String _adminEmail = "agyekumpeter123@gmail.com";
-  final String _appPassword = "mmvc nwcj alff edwr";
+  final String _adminEmail = dotenv.env['EMAIL'] ?? '';
+  final String _appPassword = dotenv.env['EMAIL_PASSWORD'] ?? '';
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
+
+    // 🟢 NEW: Check expirations when switching to the USERS tab (index 1)
+    _tabController.addListener(() {
+      if (_tabController.index == 1 && !_tabController.indexIsChanging) {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null && _isAdmin()) {
+          AdminService.checkAndLiftExpiredRestrictions(user.uid);
+        }
+      }
+    });
   }
 
   bool _isAdmin() {
@@ -90,16 +108,20 @@ class _AdminDashboardState extends State<AdminDashboard>
     String productName,
   ) async {
     try {
-      await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
-      await FirebaseFirestore.instance
-          .collection('reports')
-          .doc(reportId)
-          .update({'status': 'resolved'});
+      // 🟢 COMPREHENSIVE POST DELETION
+      await PostService().deletePostCompletely(
+        postId,
+        reportId: reportId,
+        uploaderEmail: uploaderEmail,
+        productName: productName,
+      );
 
       if (uploaderEmail != null) {
         _sendEmailDirectly(uploaderEmail, productName);
       }
-      _showSnackBar("Post deleted forever. User notified via email.");
+      _showSnackBar(
+        "Post and all associated data deleted forever. User notified via email.",
+      );
     } catch (e) {
       _showSnackBar("Failed to delete post: $e", isError: true);
     }
@@ -368,8 +390,19 @@ class _AdminDashboardState extends State<AdminDashboard>
   }
 
   Future<void> _deleteUserRecord(String userId) async {
-    await FirebaseFirestore.instance.collection('users').doc(userId).delete();
-    _showSnackBar("User profile deleted.");
+    try {
+      // 🟢 DELETE ALL USER POSTS COMPLETELY
+      await PostService().deleteAllUserPosts(userId);
+
+      // Delete the user document
+      await FirebaseFirestore.instance.collection('users').doc(userId).delete();
+
+      _showSnackBar(
+        "User account and all associated posts deleted permanently.",
+      );
+    } catch (e) {
+      _showSnackBar("Failed to delete user: $e", isError: true);
+    }
   }
 
   @override
@@ -398,23 +431,27 @@ class _AdminDashboardState extends State<AdminDashboard>
           tabs: const [
             Tab(text: "REPORTS"),
             Tab(text: "USERS"),
+            Tab(text: "POSTS"),
           ],
         ),
         leading: Builder(
           builder: (context) => IconButton(
-            icon: const Icon(Icons.sort), // <--- The Sort Icon you wanted
+            icon: const Icon(Icons.sort),
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [_buildReportsTab(), _buildUsersTab()],
+        children: [
+          _buildReportsTab(),
+          _buildUsersTab(),
+          const PostsManagementTab(),
+        ],
       ),
     );
   }
 
-  // 🔴 1. REPORTS TAB WITH CHARTS & TIE-BREAKER LOGIC
   Widget _buildReportsTab() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -427,7 +464,7 @@ class _AdminDashboardState extends State<AdminDashboard>
         }
         final docs = snapshot.data!.docs;
 
-        // --- 📊 Smart Analytics Logic ---
+        // Analytics Logic
         Map<String, int> reasonCounts = {};
         for (var doc in docs) {
           String r = (doc.data() as Map)['reason'] ?? 'Other';
@@ -438,22 +475,17 @@ class _AdminDashboardState extends State<AdminDashboard>
         String displayValue = "None";
 
         if (reasonCounts.isNotEmpty) {
-          // 1. Find the highest count
           int maxCount = reasonCounts.values.reduce((a, b) => a > b ? a : b);
-
-          // 2. Find ALL reasons that match this count
           List<String> topReasons = reasonCounts.entries
               .where((e) => e.value == maxCount)
               .map((e) => e.key)
               .toList();
 
-          // 3. Formatter: Join ties, truncate if too long
           if (topReasons.length == 1) {
             displayLabel = "Most Common";
             displayValue = topReasons.first;
           } else {
             displayLabel = "Top Issues (Tie)";
-            // If more than 2 tied, show "+X"
             if (topReasons.length > 2) {
               displayValue =
                   "${topReasons[0]}, ${topReasons[1]} (+${topReasons.length - 2})";
@@ -465,7 +497,6 @@ class _AdminDashboardState extends State<AdminDashboard>
 
         return Column(
           children: [
-            // --- Analytics Header ---
             if (docs.isNotEmpty)
               Container(
                 margin: const EdgeInsets.all(16),
@@ -531,7 +562,6 @@ class _AdminDashboardState extends State<AdminDashboard>
                         ],
                       ),
                     ),
-                    // 📊 MINI PIE CHART
                     SizedBox(
                       height: 100,
                       width: 100,
@@ -542,7 +572,7 @@ class _AdminDashboardState extends State<AdminDashboard>
                           sections: reasonCounts.entries.map((e) {
                             return PieChartSectionData(
                               value: e.value.toDouble(),
-                              title: "", // Hide text on chart for cleanliness
+                              title: "",
                               radius: 30,
                               color:
                                   Colors.primaries[reasonCounts.keys
@@ -558,7 +588,6 @@ class _AdminDashboardState extends State<AdminDashboard>
                 ),
               ),
 
-            // --- Reports List ---
             Expanded(
               child: docs.isEmpty
                   ? const Center(child: Text("All Clean! No pending reports."))
@@ -608,7 +637,6 @@ class _AdminDashboardState extends State<AdminDashboard>
     );
   }
 
-  // 🔴 2. USERS TAB WITH GAUGE STATS
   Widget _buildUsersTab() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('users').snapshots(),
@@ -617,8 +645,8 @@ class _AdminDashboardState extends State<AdminDashboard>
           return const Center(child: CircularProgressIndicator());
         }
         var users = snapshot.data!.docs;
+        var originalUsers = users;
 
-        // 📊 Filter Logic
         if (_userSearchQuery.isNotEmpty) {
           users = users
               .where(
@@ -630,16 +658,24 @@ class _AdminDashboardState extends State<AdminDashboard>
               .toList();
         }
 
-        // 📊 Stats Calculation
-        int total = users.length;
-        int restricted = users
+        if (_currentUserFilter == UserFilter.active) {
+          users = users
+              .where((u) => (u.data() as Map)['isRestricted'] != true)
+              .toList();
+        } else if (_currentUserFilter == UserFilter.restricted) {
+          users = users
+              .where((u) => (u.data() as Map)['isRestricted'] == true)
+              .toList();
+        }
+
+        int total = originalUsers.length;
+        int restricted = originalUsers
             .where((u) => (u.data() as Map)['isRestricted'] == true)
             .length;
         int active = total - restricted;
 
         return Column(
           children: [
-            // --- Status Bar ---
             Container(
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.all(16),
@@ -651,12 +687,29 @@ class _AdminDashboardState extends State<AdminDashboard>
               child: Column(
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
+                      _buildStatItem(
+                        "All Users",
+                        "$total",
+                        Colors.blue.shade700,
+                        isActive: _currentUserFilter == UserFilter.all,
+                        onTap: () =>
+                            setState(() => _currentUserFilter = UserFilter.all),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 40,
+                        color: Colors.grey.shade300,
+                      ),
                       _buildStatItem(
                         "Active Users",
                         "$active",
                         Colors.green.shade700,
+                        isActive: _currentUserFilter == UserFilter.active,
+                        onTap: () => setState(
+                          () => _currentUserFilter = UserFilter.active,
+                        ),
                       ),
                       Container(
                         width: 1,
@@ -667,11 +720,14 @@ class _AdminDashboardState extends State<AdminDashboard>
                         "Restricted",
                         "$restricted",
                         Colors.red.shade700,
+                        isActive: _currentUserFilter == UserFilter.restricted,
+                        onTap: () => setState(
+                          () => _currentUserFilter = UserFilter.restricted,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 15),
-                  // Visual Gauge
                   ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: LinearProgressIndicator(
@@ -687,7 +743,6 @@ class _AdminDashboardState extends State<AdminDashboard>
               ),
             ),
 
-            // Search Bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextField(
@@ -709,7 +764,6 @@ class _AdminDashboardState extends State<AdminDashboard>
             ),
             const SizedBox(height: 10),
 
-            // Users List
             Expanded(
               child: ListView.builder(
                 itemCount: users.length,
@@ -775,30 +829,50 @@ class _AdminDashboardState extends State<AdminDashboard>
     );
   }
 
-  Widget _buildStatItem(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: color,
+  Widget _buildStatItem(
+    String label,
+    String value,
+    Color color, {
+    bool isActive = false,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? color.withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isActive ? color : Colors.transparent,
+            width: 2,
           ),
         ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey.shade600,
-            fontWeight: FontWeight.bold,
-          ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: isActive ? color : Colors.grey.shade600,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
-  // --- REPORT ACTION SHEET (Unchanged) ---
   void _showReportActionSheet(String reportId, Map<String, dynamic> data) {
     showModalBottomSheet(
       context: context,
@@ -920,7 +994,6 @@ class _AdminDashboardState extends State<AdminDashboard>
     );
   }
 
-  // --- USER ACTION SHEET (Unchanged) ---
   void _showUserActionSheet(String userId, Map<String, dynamic> userData) {
     final bool isRestricted = userData['isRestricted'] ?? false;
     showModalBottomSheet(
@@ -958,9 +1031,29 @@ class _AdminDashboardState extends State<AdminDashboard>
               _showWarningComposeDialog(userId);
             },
           ),
+
+          // 🟢 NEW OPTION: View All Posts
+          ListTile(
+            leading: const Icon(Icons.grid_view, color: Colors.indigo),
+            title: const Text("View All Posts"),
+            subtitle: const Text("Manage, delete, or investigate user content"),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (c) => AdminUserPostsPage(
+                    userId: userId,
+                    userName: userData['displayName'] ?? "User",
+                  ),
+                ),
+              );
+            },
+          ),
+
           ListTile(
             leading: const Icon(Icons.delete_forever, color: Colors.red),
-            title: const Text("Delete Record"),
+            title: const Text("Delete User & Data"),
             onTap: () {
               Navigator.pop(context);
               _deleteUserRecord(userId);

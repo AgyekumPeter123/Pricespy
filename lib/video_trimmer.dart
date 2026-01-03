@@ -34,6 +34,9 @@ class _VideoTrimmerScreenState extends State<VideoTrimmerScreen> {
       startValue: _startValue,
       endValue: _endValue,
       onSave: (outputPath) {
+        // 🔴 CRITICAL FIX: Check mounted before using context
+        if (!mounted) return;
+
         setState(() => _isSaving = false);
         if (outputPath != null) {
           Navigator.pop(context, File(outputPath)); // Return trimmed file
@@ -67,7 +70,7 @@ class _VideoTrimmerScreenState extends State<VideoTrimmerScreen> {
       ),
       body: Center(
         child: Container(
-          padding: const EdgeInsets.only(bottom: 30.0),
+          padding: const EdgeInsets.only(bottom: 30),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.max,
@@ -100,7 +103,10 @@ class _VideoTrimmerScreenState extends State<VideoTrimmerScreen> {
                     startValue: _startValue,
                     endValue: _endValue,
                   );
-                  setState(() => _isPlaying = playbackState);
+                  // 🔴 Safety check (optional but good practice)
+                  if (mounted) {
+                    setState(() => _isPlaying = playbackState);
+                  }
                 },
               ),
             ],

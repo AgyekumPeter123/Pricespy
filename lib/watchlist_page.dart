@@ -28,7 +28,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
     'West': 0,
   };
 
-  // --- MODIFICATION 1: SAFETY PERMISSION CHECK ---
+  // --- SAFETY PERMISSION CHECK ---
   Future<bool> _handleLocationPermission() async {
     bool serviceEnabled;
     LocationPermission permission;
@@ -115,10 +115,11 @@ class _WatchlistPageState extends State<WatchlistPage> {
         String? lastTown;
         double maxDist = 0;
         for (double b in s.value) {
+          // 🟢 INFINITE LOOP SAFEGUARD
           if (mySessionId != _scanSessionId) return "Cancelled";
 
           for (double d in steps) {
-            // Fix: Add delay to prevent UI freeze (Smoothness)
+            // 🟢 UI SMOOTHNESS DELAY
             await Future.delayed(const Duration(milliseconds: 5));
             String? t = await _getTown(position, d, b);
             if (t != null && t.isNotEmpty && t != _homeTown) {
@@ -198,6 +199,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
 
     if (!mounted) return;
 
+    // --- FIX: SNACKBAR OVERFLOW PROTECTION ---
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -211,7 +213,14 @@ class _WatchlistPageState extends State<WatchlistPage> {
               ),
             ),
             const SizedBox(width: 15),
-            Text("Scanning for '${spyData['keyword']}'..."),
+            // Use Expanded to allow text to take remaining space and wrap
+            Expanded(
+              child: Text(
+                "Scanning for '${spyData['keyword']}'...",
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         duration: const Duration(seconds: 2),
@@ -405,7 +414,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                       controller: priceController,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
-                        labelText: "Max Price (₵)",
+                        labelText: "Max Price (₵)", // Cedi
                         filled: true,
                         fillColor: Colors.grey[50],
                         border: OutlineInputBorder(
@@ -713,7 +722,6 @@ class _WatchlistPageState extends State<WatchlistPage> {
             .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            // --- MODIFICATION 2: BETTER EMPTY STATE ---
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -733,24 +741,24 @@ class _WatchlistPageState extends State<WatchlistPage> {
             );
           }
           return ListView.builder(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             itemCount: snapshot.data!.docs.length,
             itemBuilder: (context, index) {
               final data =
                   snapshot.data!.docs[index].data() as Map<String, dynamic>;
               final docId = snapshot.data!.docs[index].id;
 
-              // --- MODIFICATION 3: SWIPE TO DELETE ---
+              // --- SWIPE TO DELETE ---
               return Dismissible(
                 key: Key(docId),
                 direction: DismissDirection.endToStart,
                 background: Container(
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 20),
-                  margin: const EdgeInsets.only(bottom: 12),
+                  margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
                     color: Colors.red[100],
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(20),
                   ),
                   child: Icon(Icons.delete, color: Colors.red[800]),
                 ),
@@ -791,89 +799,216 @@ class _WatchlistPageState extends State<WatchlistPage> {
                     context,
                   ).showSnackBar(const SnackBar(content: Text("Spy removed")));
                 },
-                child: Card(
-                  elevation: 2,
-                  color: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                // --- NEW CLEAN CARD DESIGN (Overflow Protected) ---
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    leading: CircleAvatar(
-                      backgroundColor: Colors.green[50],
-                      radius: 25,
-                      child: Icon(
-                        Icons.satellite_alt,
-                        color: Colors.green[800],
-                      ),
-                    ),
-                    title: Text(
-                      data['keyword'],
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 4.0),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.monetization_on,
-                            size: 14,
-                            color: Colors.grey[500],
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            "Max: ₵${data['max_price']}",
-                            style: TextStyle(color: Colors.grey[700]),
-                          ),
-                          const SizedBox(width: 10),
-                          Icon(
-                            Icons.wifi_tethering,
-                            size: 14,
-                            color: Colors.grey[500],
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            "${data['radius_km']} km",
-                            style: TextStyle(color: Colors.grey[700]),
-                          ),
-                        ],
-                      ),
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Edit
-                        IconButton(
-                          icon: const Icon(
-                            Icons.edit_outlined,
-                            color: Colors.grey,
-                          ),
-                          onPressed: () => _showAddAlertSheet(
-                            existingData: data,
-                            docId: docId,
-                          ),
+                  child: Column(
+                    children: [
+                      // 1. TOP SECTION: Icon + Title + Pills
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.green[50],
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.satellite_alt,
+                                color: Colors.green[800],
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // EXPANDED COLUMN PREVENTS OVERFLOW
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // TITLE SAFETY
+                                  Text(
+                                    data['keyword'] ?? 'Unknown',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                      color: Colors.black87,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  // INFO ROW (Pills)
+                                  Row(
+                                    children: [
+                                      // Price Pill (Flexible)
+                                      Flexible(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[100],
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.payments_outlined,
+                                                size: 14,
+                                                color: Colors.grey[600],
+                                              ),
+                                              const SizedBox(width: 4),
+                                              // TEXT SAFETY
+                                              Flexible(
+                                                child: Text(
+                                                  "Max: ₵${data['max_price']}",
+                                                  style: TextStyle(
+                                                    color: Colors.grey[800],
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Radius Pill (Flexible)
+                                      Flexible(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[100],
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.radar,
+                                                size: 14,
+                                                color: Colors.grey[600],
+                                              ),
+                                              const SizedBox(width: 4),
+                                              // TEXT SAFETY
+                                              Flexible(
+                                                child: Text(
+                                                  "${data['radius_km']} km",
+                                                  style: TextStyle(
+                                                    color: Colors.grey[800],
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                        // Prominent Scan Button
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.blue[50],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: IconButton(
-                            icon: const Icon(Icons.radar, color: Colors.blue),
-                            tooltip: "Scan Now",
-                            onPressed: () => _triggerManualSpy(data),
-                          ),
+                      ),
+                      // 2. DIVIDER
+                      Divider(height: 1, color: Colors.grey[200]),
+
+                      // 3. BOTTOM ACTION ROW
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
                         ),
-                      ],
-                    ),
+                        child: Row(
+                          children: [
+                            // Edit Button (Expanded 50%)
+                            Expanded(
+                              child: TextButton.icon(
+                                onPressed: () => _showAddAlertSheet(
+                                  existingData: data,
+                                  docId: docId,
+                                ),
+                                icon: const Icon(
+                                  Icons.edit_outlined,
+                                  size: 18,
+                                  color: Colors.grey,
+                                ),
+                                label: const Text(
+                                  "Edit",
+                                  style: TextStyle(color: Colors.grey),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Vertical Divider
+                            Container(
+                              width: 1,
+                              height: 24,
+                              color: Colors.grey[300],
+                            ),
+                            // Scan Button (Expanded 50%)
+                            Expanded(
+                              child: TextButton.icon(
+                                onPressed: () => _triggerManualSpy(data),
+                                icon: const Icon(
+                                  Icons.radar,
+                                  size: 18,
+                                  color: Colors.blue,
+                                ),
+                                label: const Text(
+                                  "Scan Now",
+                                  style: TextStyle(
+                                    color: Colors.blue,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               );

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'mail_service.dart';
+import 'services/post_service.dart';
 
 class AdminService {
   static final _db = FirebaseFirestore.instance;
@@ -22,8 +23,8 @@ class AdminService {
       'timestamp': FieldValue.serverTimestamp(),
     });
 
-    // B. Delete the Post
-    await _db.collection('posts').doc(postId).delete();
+    // B. 🟢 COMPREHENSIVE POST DELETION: removes post, comments, and saved references
+    await PostService().deletePostCompletely(postId);
   }
 
   // 2. Restrict User + Email
@@ -64,5 +65,63 @@ class AdminService {
       body:
           "Your PriceSpy account has been permanently deleted by the admin team.",
     );
+  }
+
+  // 🟢 5. NEW: Automated Maintenance (Check & Lift Expired Restrictions)
+  // Call this from Sidebar or Dashboard initState
+  static Future<void> checkAndLiftExpiredRestrictions(String adminUid) async {
+    try {
+      final now = DateTime.now();
+      // Find all users who are currently restricted
+      final snapshot = await _db
+          .collection('users')
+          .where('isRestricted', isEqualTo: true)
+          .get();
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final Timestamp? restrictedUntil = data['restrictedUntil'];
+
+        if (restrictedUntil != null) {
+          final expiry = restrictedUntil.toDate();
+
+          // Check if the time has passed
+          if (now.isAfter(expiry)) {
+            // Lift Restriction
+            await _db.collection('users').doc(doc.id).update({
+              'isRestricted': false,
+              'restrictedUntil': null,
+            });
+
+            // 🟢 Send Official Email to User
+            final String? userEmail = data['email'];
+            if (userEmail != null && userEmail.isNotEmpty) {
+              await MailService.sendSupportEmail(
+                targetEmail: userEmail,
+                subject: "Account Restriction Lifted - PriceSpy",
+                body:
+                    "Good news! Your account restriction has been lifted. You can now log in and access all features again.",
+              );
+            }
+
+            // Send Notification to Admin Inbox
+            await _db
+                .collection('users')
+                .doc(adminUid)
+                .collection('notifications')
+                .add({
+                  'message':
+                      'Time due: Restriction automatically removed for ${data['email'] ?? 'User'}. Email notification sent.',
+                  'type': 'alert',
+                  'timestamp': FieldValue.serverTimestamp(),
+                  'read': false,
+                  'post_id': '', // Empty string to prevent null errors
+                });
+          }
+        }
+      }
+    } catch (e) {
+      // Silent error handling for background task
+    }
   }
 }

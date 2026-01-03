@@ -4,10 +4,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'add_price_sheet.dart';
 import 'comment_sheet.dart';
 import 'price_trend_chart.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'services/post_service.dart';
 
 class ProductDetailsPage extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -203,15 +205,16 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     );
 
     if (confirm == true) {
-      await FirebaseFirestore.instance
-          .collection('posts')
-          .doc(widget.documentId)
-          .delete();
+      // 🟢 COMPREHENSIVE POST DELETION: removes post, comments, and saved references
+      await PostService().deletePostCompletely(widget.documentId);
+
       if (mounted) {
         Navigator.pop(context); // Close details page
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Deleted successfully")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Post and all data deleted successfully"),
+          ),
+        );
       }
     }
   }
@@ -239,6 +242,45 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     }
   }
 
+  // 🟢 HELPER: Condition Badge
+  Widget _buildConditionBadge(String condition) {
+    Color bgColor;
+    Color textColor;
+
+    switch (condition) {
+      case 'New':
+        bgColor = Colors.green.shade50;
+        textColor = Colors.green.shade800;
+        break;
+      case 'Refurbished':
+        bgColor = Colors.orange.shade50;
+        textColor = Colors.orange.shade900;
+        break;
+      case 'Used':
+      default:
+        bgColor = Colors.grey.shade100;
+        textColor = Colors.grey.shade700;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: bgColor.withOpacity(1.0)),
+      ),
+      child: Text(
+        condition,
+        style: TextStyle(
+          color: textColor,
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final User? currentUser = FirebaseAuth.instance.currentUser;
@@ -249,6 +291,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     String landmark = widget.data['landmark'] ?? '';
 
     String shopName = widget.data['shop_name'] ?? '';
+    // 🟢 Retrieve Condition from data
     String condition = widget.data['item_condition'] ?? 'New';
     String shopFrontUrl = widget.data['shop_front_image_url'] ?? '';
     bool isShop = widget.data['poster_type'] == 'Shop Owner';
@@ -295,13 +338,30 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
               child: Container(
                 height: 350,
                 width: double.infinity,
-                decoration: BoxDecoration(
-                  image: DecorationImage(
-                    image: NetworkImage(widget.data['image_url'] ?? ''),
-                    fit: BoxFit.cover,
-                  ),
-                  color: Colors.grey[200],
-                ),
+                color: Colors.grey[200],
+                child:
+                    widget.data['image_url'] != null &&
+                        widget.data['image_url'].isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: widget.data['image_url'],
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) =>
+                            const Center(child: CircularProgressIndicator()),
+                        errorWidget: (context, url, error) => const Center(
+                          child: Icon(
+                            Icons.broken_image,
+                            color: Colors.grey,
+                            size: 50,
+                          ),
+                        ),
+                      )
+                    : const Center(
+                        child: Icon(
+                          Icons.image_not_supported,
+                          color: Colors.grey,
+                          size: 50,
+                        ),
+                      ),
               ),
             ),
 
@@ -341,26 +401,40 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                   // Tags Row
                   Wrap(
                     spacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Chip(
-                        label: Text(widget.data['poster_type'] ?? 'Individual'),
-                        backgroundColor: isShop
-                            ? Colors.blue[100]
-                            : Colors.green[100],
-                        labelStyle: TextStyle(
-                          color: isShop ? Colors.blue[900] : Colors.green[900],
+                      // 🟢 FIXED: Use Container instead of Chip to prevent clipping of "Individual"
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isShop ? Colors.blue[50] : Colors.green[50],
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isShop
+                                ? Colors.blue[200]!
+                                : Colors.green[200]!,
+                          ),
+                        ),
+                        child: Text(
+                          widget.data['poster_type'] ?? 'Individual',
+                          style: TextStyle(
+                            color: isShop
+                                ? Colors.blue[900]
+                                : Colors.green[900],
+                            fontWeight: FontWeight.w600,
+                            height: 1.1, // Prevents vertical clipping
+                          ),
                         ),
                       ),
 
-                      if (!isShop)
-                        Chip(
-                          label: Text(condition),
-                          backgroundColor: Colors.orange[100],
-                          labelStyle: TextStyle(color: Colors.orange[900]),
-                        ),
+                      // 🟢 NEW: Product Condition Badge (Only for individuals usually)
+                      if (!isShop) _buildConditionBadge(condition),
 
                       Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
+                        padding: const EdgeInsets.only(top: 0),
                         child: Text(
                           "/ ${widget.data['unit'] ?? 'Item'}",
                           style: const TextStyle(
@@ -511,9 +585,34 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       width: double.infinity,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(15),
-                        image: DecorationImage(
-                          image: NetworkImage(shopFrontUrl),
-                          fit: BoxFit.cover,
+                        color: Colors.grey[200],
+                      ),
+                      child: CachedNetworkImage(
+                        imageUrl: shopFrontUrl,
+                        fit: BoxFit.cover,
+                        imageBuilder: (context, imageProvider) => Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(15),
+                            image: DecorationImage(
+                              image: imageProvider,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        placeholder: (context, url) =>
+                            const Center(child: CircularProgressIndicator()),
+                        errorWidget: (context, url, error) => Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(15),
+                            color: Colors.grey[200],
+                          ),
+                          child: const Center(
+                            child: Icon(
+                              Icons.broken_image,
+                              color: Colors.grey,
+                              size: 40,
+                            ),
+                          ),
                         ),
                       ),
                     ),

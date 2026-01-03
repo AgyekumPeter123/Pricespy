@@ -19,9 +19,15 @@ class ChurnService {
 
   Future<void> loadModel() async {
     try {
-      _interpreter = await Interpreter.fromAsset(
-        'assets/files/telco_churn_model.tflite',
-      );
+      // 🛡️ SAFELY LOAD MODEL
+      try {
+        _interpreter = await Interpreter.fromAsset(
+          'assets/files/telco_churn_model.tflite',
+        );
+      } catch (e) {
+        print("❌ Error loading TFLite Model: $e");
+        _interpreter = null; // Ensure null so we can check later
+      }
 
       final scalerString = await rootBundle.loadString(
         'assets/files/scaler.json',
@@ -45,7 +51,7 @@ class ChurnService {
 
       _fetchCurrentExchangeRate();
     } catch (e) {
-      print("Error loading assets: $e");
+      print("❌ Error loading churn assets: $e");
     }
   }
 
@@ -130,6 +136,19 @@ class ChurnService {
   Future<Map<String, dynamic>> predict(Map<String, dynamic> inputs) async {
     if (!isLoaded) await loadModel();
 
+    // 🛡️ CRITICAL FIX: If model failed to load, return safe default
+    if (_interpreter == null) {
+      print("⚠️ Warning: Model not loaded. Returning default prediction.");
+      return {
+        'willChurn': false,
+        'probability': 0.1,
+        'reasons': ["AI Model Unavailable"],
+        'solution':
+            "The prediction model could not be loaded. Please check assets.",
+        'rateUsed': _cachedExchangeRate,
+      };
+    }
+
     Map<String, dynamic> processedInputs = Map.from(inputs);
     if (processedInputs.containsKey('MonthlyCharges')) {
       processedInputs['MonthlyCharges'] =
@@ -144,7 +163,18 @@ class ChurnService {
     var inputTensor = [inputVector];
     var outputTensor = List.filled(1, List.filled(1, 0.0)).toList();
 
-    _interpreter!.run(inputTensor, outputTensor);
+    try {
+      _interpreter!.run(inputTensor, outputTensor);
+    } catch (e) {
+      print("❌ Error running inference: $e");
+      return {
+        'willChurn': false,
+        'probability': 0.0,
+        'reasons': ["Inference Error"],
+        'solution': "An error occurred during prediction.",
+        'rateUsed': _cachedExchangeRate,
+      };
+    }
 
     double riskScore = outputTensor[0][0];
     bool willChurn = riskScore > _threshold;

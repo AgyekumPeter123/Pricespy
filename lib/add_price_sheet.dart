@@ -11,6 +11,7 @@ import 'image_helper.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'services/connectivity_service.dart';
 import 'profile_page.dart';
 
 class AddPriceSheet extends StatefulWidget {
@@ -37,16 +38,13 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
   final _landmarkController = TextEditingController();
   final _shopNameController = TextEditingController();
 
-  // Focus Nodes
-  final FocusNode _nameFocus = FocusNode();
-  final FocusNode _descFocus = FocusNode();
-  final FocusNode _priceFocus = FocusNode();
-  final FocusNode _shopNameFocus = FocusNode();
-  final FocusNode _phoneFocus = FocusNode();
-  final FocusNode _locationFocus = FocusNode();
-  final FocusNode _landmarkFocus = FocusNode();
+  // Initialize empty to ensure score starts at 0
+  final _unitController = TextEditingController();
 
+  // 🟢 NEW: Condition Logic
   String _itemCondition = 'New';
+  final List<String> _conditionOptions = ['New', 'Used', 'Refurbished'];
+
   File? _productImage;
   File? _shopFrontImage;
   String? _existingImageUrl;
@@ -58,12 +56,11 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
   // Voice & Suggestions
   late stt.SpeechToText _speech;
   bool _isListening = false;
-  String _selectedUnit = 'Item';
   List<String> _aiSuggestions = [];
 
-  // 🟢 SEPARATE LOADING STATES
+  // Loading States
   bool _isAnalyzingProduct = false;
-  bool _isAnalyzingShop = false; // New state for Shop OCR
+  bool _isAnalyzingShop = false;
 
   final List<String> _marketUnits = [
     'Item',
@@ -88,8 +85,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       _loadExistingData();
     } else {
       _detectLocation();
-      // 🟢 REMOVED: The initial _checkUserProfile() call.
-      // Now it only checks when you tap "Individual".
     }
 
     // Listeners for Chart updates
@@ -97,9 +92,11 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     _priceController.addListener(() => setState(() {}));
     _locationController.addListener(() => setState(() {}));
     _landmarkController.addListener(() => setState(() {}));
-    _descriptionController.addListener(
-      () => setState(() {}),
-    ); // Listener for description length
+    _descriptionController.addListener(() => setState(() {}));
+    _unitController.addListener(() => setState(() {}));
+    _phoneController.addListener(() => setState(() {}));
+    _whatsappController.addListener(() => setState(() {}));
+    _shopNameController.addListener(() => setState(() {}));
   }
 
   void _loadExistingData() {
@@ -113,7 +110,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     _locationController.text = data['location_name'] ?? '';
     _landmarkController.text = data['landmark'] ?? '';
     _posterType = data['poster_type'] ?? 'Individual';
-    _selectedUnit = data['unit'] ?? 'Item';
+    _unitController.text = data['unit'] ?? 'Item';
     _existingImageUrl = data['image_url'];
     _shopNameController.text = data['shop_name'] ?? '';
     _itemCondition = data['item_condition'] ?? 'New';
@@ -135,6 +132,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         final String callNum = data['call_number'] ?? "";
         final String waNum = data['whatsapp_number'] ?? "";
 
+        // Setting text triggers the listeners, updating the score immediately
         if (callNum.isNotEmpty) _phoneController.text = callNum;
         if (waNum.isNotEmpty) _whatsappController.text = waNum;
 
@@ -210,6 +208,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     _locationController.dispose();
     _landmarkController.dispose();
     _shopNameController.dispose();
+    _unitController.dispose();
     super.dispose();
   }
 
@@ -227,12 +226,18 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
+
+      if (!mounted) return; // 🔴 Crash Fix
+
       if (mounted) setState(() => _currentPosition = position);
 
       List<Placemark> placemarks = await placemarkFromCoordinates(
         position.latitude,
         position.longitude,
       );
+
+      if (!mounted) return; // 🔴 Crash Fix
+
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks[0];
         String address = "${place.street}, ${place.locality}";
@@ -320,8 +325,11 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       final textRecognizer = TextRecognizer();
       final recognizedText = await textRecognizer.processImage(inputImage);
 
+      if (!mounted) return; // 🔴 Crash Fix
+
       List<String> newSuggestions = [];
       String? foundPrice;
+      String? foundUnit;
 
       final List<String> ignoredLabels = [
         'Room',
@@ -337,14 +345,33 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         if (!ignoredLabels.contains(l.label)) newSuggestions.add(l.label);
       }
 
+      final priceWithCurrencyRegex = RegExp(
+        r'([₵$]|ghs)\s*(\d+(\.\d{2})?)',
+        caseSensitive: false,
+      );
+      final unitRegex = RegExp(
+        r'\b(\d+(\.\d+)?)\s*(kg|g|l|ml|liters|grams|lb|oz|pcs)\b',
+        caseSensitive: false,
+      );
+
       for (TextBlock block in recognizedText.blocks) {
         String text = block.text.trim().toLowerCase();
-        final priceWithCurrencyRegex = RegExp(r'([₵$]|ghs)\s*(\d+(\.\d{2})?)');
+
+        // Check Price
         if (priceWithCurrencyRegex.hasMatch(text)) {
           var match = priceWithCurrencyRegex.firstMatch(text);
           if (match != null)
             foundPrice = match.group(0)!.replaceAll(RegExp(r'[^0-9.]'), '');
         }
+
+        // Check Unit
+        if (unitRegex.hasMatch(text)) {
+          var match = unitRegex.firstMatch(text);
+          if (match != null) {
+            foundUnit = match.group(0);
+          }
+        }
+
         if (text.length > 3 && text.length < 20) {
           String cleanText = block.text.replaceAll(RegExp(r'[^\w\s]'), '');
           if (cleanText.isNotEmpty) newSuggestions.insert(0, cleanText);
@@ -354,7 +381,16 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       if (mounted) {
         setState(() {
           _aiSuggestions = newSuggestions.take(8).toList();
-          if (foundPrice != null) _priceController.text = foundPrice!;
+          if (foundPrice != null) _priceController.text = foundPrice;
+          // Auto-fill unit
+          if (foundUnit != null) {
+            foundUnit = foundUnit!.replaceAll(' ', '').toLowerCase();
+            if (foundUnit!.contains('l'))
+              foundUnit = foundUnit!.replaceAll('l', 'L');
+            if (foundUnit!.contains('k'))
+              foundUnit = foundUnit!.replaceAll('k', 'K');
+            _unitController.text = foundUnit!;
+          }
         });
       }
       imageLabeler.close();
@@ -366,7 +402,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     }
   }
 
-  // --- 🟢 NEW: SHOP IMAGE LOGIC (OCR) ---
   Future<void> _pickShopImage() async {
     final file = await _imageHelper.pickImage();
     if (file == null) return;
@@ -383,13 +418,12 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       ],
     );
     if (cropped != null) {
+      // Set State triggers UI update, which calls _calculateQualityScore
       setState(() => _shopFrontImage = File(cropped.path));
-      // Trigger Shop Name analysis
       await _analyzeShopImage(File(cropped.path));
     }
   }
 
-  // 🟢 Detects Shop Name from image
   Future<void> _analyzeShopImage(File image) async {
     setState(() => _isAnalyzingShop = true);
     final InputImage inputImage = InputImage.fromFile(image);
@@ -398,7 +432,8 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       final textRecognizer = TextRecognizer();
       final recognizedText = await textRecognizer.processImage(inputImage);
 
-      // HEURISTIC: Shop names are usually the largest text on the sign
+      if (!mounted) return; // 🔴 Crash Fix
+
       TextBlock? largestBlock;
       double maxArea = 0;
 
@@ -411,7 +446,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       }
 
       if (largestBlock != null) {
-        // Remove newlines to keep it single line if possible
         String shopName = largestBlock.text.replaceAll('\n', ' ').trim();
 
         if (mounted) {
@@ -436,11 +470,10 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
   }
 
   Future<void> _saveProduct() async {
-    // 🟢 1. STRICT QUALITY CHECK
     if (_calculateQualityScore() < 100) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text("Listing Quality must be 100% to post!"),
+          content: const Text("Posting Quality must be 100% to post!"),
           backgroundColor: Colors.red.shade700,
           behavior: SnackBarBehavior.floating,
         ),
@@ -448,25 +481,37 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       return;
     }
 
+    final connectivityService = ConnectivityService();
+    if (!await connectivityService.checkAndShowConnectivity(context)) {
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       String imageUrl = _existingImageUrl ?? "";
-      if (_productImage != null)
+      if (_productImage != null) {
         imageUrl = await _imageHelper.uploadImage(_productImage!) ?? "";
+        if (!mounted) return; // 🔴 Crash Fix
+      }
 
       String shopImageUrl = "";
-      if (_shopFrontImage != null)
+      if (_shopFrontImage != null) {
         shopImageUrl = await _imageHelper.uploadImage(_shopFrontImage!) ?? "";
+        if (!mounted) return; // 🔴 Crash Fix
+      }
 
       String whatsappNum = _whatsappController.text.trim();
       if (whatsappNum.isEmpty) whatsappNum = _phoneController.text.trim();
+
+      String finalUnit = _unitController.text.trim();
+      if (finalUnit.isEmpty) finalUnit = "Item";
 
       final dataMap = {
         'search_key': _nameController.text.trim().toLowerCase(),
         'product_name': _nameController.text.trim(),
         'description': _descriptionController.text.trim(),
         'price': double.tryParse(_priceController.text) ?? 0.0,
-        'unit': _selectedUnit,
+        'unit': finalUnit,
         'phone': _phoneController.text.trim(),
         'whatsapp_phone': whatsappNum,
         'location_name': _locationController.text.trim(),
@@ -520,16 +565,68 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     }
   }
 
+  // 🟢 DYNAMIC SCORING based on Shop vs Individual
   double _calculateQualityScore() {
     double score = 0;
+
+    // --- SHARED FIELDS (Max 65%) ---
+    // Image: 15%
     if (_productImage != null ||
         (_existingImageUrl != null && _existingImageUrl!.isNotEmpty))
-      score += 30;
-    if (_nameController.text.isNotEmpty) score += 20;
-    if (_priceController.text.isNotEmpty) score += 20;
-    if (_locationController.text.isNotEmpty) score += 10;
-    if (_landmarkController.text.isNotEmpty) score += 10;
-    if (_descriptionController.text.length > 10) score += 10;
+      score += 15;
+
+    // Name: 10%
+    if (_nameController.text.isNotEmpty) score += 10;
+
+    // Price: 10%
+    if (_priceController.text.isNotEmpty) score += 10;
+
+    // Unit: 5%
+    if (_unitController.text.isNotEmpty) score += 5;
+
+    // Location: 15% (Ignore 'Detecting...')
+    if (_locationController.text.isNotEmpty &&
+        _locationController.text != "Detecting...")
+      score += 15;
+
+    // Phone: 10%
+    if (_phoneController.text.isNotEmpty) score += 10;
+
+    // --- SPECIFIC FIELDS (Max 35%) ---
+    if (_posterType == 'Shop Owner') {
+      // 1. Shop Image: 15%
+      bool hasShopImage = _shopFrontImage != null;
+      // If editing and we don't have a local file, check if we have a url (complex to track, assume new upload needed for 100% on new posts)
+      // For simplicity in this logic:
+      if (hasShopImage)
+        score += 15;
+      else if (widget.existingData?['shop_front_image_url'] != null &&
+          widget.existingData!['shop_front_image_url'] != "")
+        score += 15;
+
+      // 2. Shop Name: 10%
+      if (_shopNameController.text.isNotEmpty) score += 10;
+
+      // 3. WhatsApp: 5%
+      if (_whatsappController.text.isNotEmpty) score += 5;
+
+      // 4. Landmark & Desc: 5% total
+      if (_landmarkController.text.isNotEmpty ||
+          _descriptionController.text.isNotEmpty)
+        score += 5;
+    } else {
+      // INDIVIDUAL
+      // 1. Landmark: 15%
+      if (_landmarkController.text.isNotEmpty) score += 15;
+
+      // 2. Description: 10%
+      if (_descriptionController.text.length > 5) score += 10;
+
+      // 3. WhatsApp: 10% (Higher importance for individuals)
+      if (_whatsappController.text.isNotEmpty) score += 10;
+    }
+
+    if (score > 100) score = 100;
     return score;
   }
 
@@ -619,7 +716,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
             _posterType = type;
             _currentStep = 1;
           });
-          // 🟢 Only check profile if INDIVIDUAL is selected
           if (type == 'Individual') {
             await _checkUserProfile();
           }
@@ -663,7 +759,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
 
   Widget _buildModernForm() {
     double qualityScore = _calculateQualityScore();
-    // 🟢 1. Disable button visual logic if score < 100
     bool isReady = qualityScore >= 100;
 
     return Column(
@@ -709,7 +804,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Listing Quality: ${qualityScore.toInt()}%",
+                    "Posting Quality: ${qualityScore.toInt()}%",
                     style: TextStyle(
                       color: Colors.green[900],
                       fontWeight: FontWeight.bold,
@@ -718,7 +813,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
                   Text(
                     isReady
                         ? "Perfect! Ready to post."
-                        : "Reach 100% to enable posting.",
+                        : "Fill in details to reach 100%.",
                     style: TextStyle(
                       color: isReady ? Colors.green[700] : Colors.redAccent,
                       fontSize: 11,
@@ -739,7 +834,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
             decoration: BoxDecoration(
               color: Colors.grey[100],
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.grey.shade300), // Added border
+              border: Border.all(color: Colors.grey.shade300),
               image: _productImage != null
                   ? DecorationImage(
                       image: FileImage(_productImage!),
@@ -825,9 +920,8 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         const SizedBox(height: 12),
         Row(
           children: [
-            // 🟢 3. RESIZED RATIOS: Price smaller, Combo larger
             Expanded(
-              flex: 4, // 40% Width
+              flex: 4,
               child: _buildGlassInput(
                 "Price",
                 _priceController,
@@ -836,14 +930,16 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
               ),
             ),
             const SizedBox(width: 10),
-            Expanded(
-              flex: 5, // 50% Width
-              child: _buildGlassDropdown(),
-            ),
+            Expanded(flex: 5, child: _buildUnitInput()),
           ],
         ),
 
-        // 🟢 SHOP ONLY SECTION
+        // 🟢 NEW: CONDITION DROPDOWN (For Individuals)
+        if (_posterType == 'Individual') ...[
+          const SizedBox(height: 12),
+          _buildConditionInput(),
+        ],
+
         if (_posterType == 'Shop Owner') ...[
           const SizedBox(height: 20),
           GestureDetector(
@@ -932,7 +1028,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         SizedBox(
           height: 55,
           child: ElevatedButton(
-            // 🟢 1. Disable button if not ready or loading
             onPressed: (_isLoading || !isReady) ? null : _saveProduct,
             style: ElevatedButton.styleFrom(
               backgroundColor: isReady ? Colors.green[800] : Colors.grey,
@@ -966,9 +1061,9 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey.shade50, // 🟢 MODERNIZED
+        color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade300), // 🟢 MODERNIZED
+        border: Border.all(color: Colors.grey.shade300),
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withOpacity(0.05),
@@ -998,13 +1093,12 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     );
   }
 
-  Widget _buildGlassDropdown() {
+  Widget _buildUnitInput() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50, // 🟢 MODERNIZED
+        color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade300), // 🟢 MODERNIZED
+        border: Border.all(color: Colors.grey.shade300),
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withOpacity(0.05),
@@ -1013,24 +1107,98 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
           ),
         ],
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _marketUnits.contains(_selectedUnit)
-              ? _selectedUnit
-              : _marketUnits[0],
-          isExpanded: true,
-          // 🟢 2. FIX OVERLAP: Ensure items have height and no weird padding
-          itemHeight: 50,
-          menuMaxHeight: 300,
-          items: _marketUnits
-              .map(
-                (e) => DropdownMenuItem(
-                  value: e,
-                  child: Text(e, overflow: TextOverflow.ellipsis, maxLines: 1),
+      child: TextField(
+        controller: _unitController,
+        decoration: InputDecoration(
+          labelText: "Unit / Size",
+          border: InputBorder.none,
+          filled: true,
+          fillColor: Colors.transparent,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 16,
+          ),
+          suffixIcon: PopupMenuButton<String>(
+            icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+            onSelected: (String value) {
+              setState(() {
+                _unitController.text = value;
+              });
+            },
+            itemBuilder: (BuildContext context) {
+              return _marketUnits.map((String choice) {
+                return PopupMenuItem<String>(
+                  value: choice,
+                  child: Text(choice),
+                );
+              }).toList();
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 🟢 NEW: Widget for Product Condition (Refurbished/Used/New)
+  Widget _buildConditionInput() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade300),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: "Condition",
+          prefixIcon: Icon(Icons.star_border, color: Colors.grey),
+          border: InputBorder.none,
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: _itemCondition,
+            isExpanded: true,
+            icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+            onChanged: (String? newValue) {
+              if (newValue != null) {
+                setState(() => _itemCondition = newValue);
+              }
+            },
+            items: _conditionOptions.map<DropdownMenuItem<String>>((
+              String value,
+            ) {
+              Color color;
+              IconData icon;
+              if (value == 'New') {
+                color = Colors.green;
+                icon = Icons.check_circle_outline;
+              } else if (value == 'Refurbished') {
+                color = Colors.orange;
+                icon = Icons.build_circle_outlined;
+              } else {
+                color = Colors.blueGrey;
+                icon = Icons.history;
+              }
+
+              return DropdownMenuItem<String>(
+                value: value,
+                child: Row(
+                  children: [
+                    Icon(icon, size: 18, color: color),
+                    const SizedBox(width: 8),
+                    Text(value),
+                  ],
                 ),
-              )
-              .toList(),
-          onChanged: (v) => setState(() => _selectedUnit = v!),
+              );
+            }).toList(),
+          ),
         ),
       ),
     );

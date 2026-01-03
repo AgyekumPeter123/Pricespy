@@ -23,6 +23,7 @@ import 'location_settings.dart';
 import 'disclaimer_page.dart';
 import 'admin_dashboard.dart';
 import 'churn_prediction_page.dart';
+import 'admin_service.dart'; // 🟢 Added for AdminService
 
 class SidebarDrawer extends StatefulWidget {
   final bool isHome;
@@ -36,15 +37,46 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
   final User? user = FirebaseAuth.instance.currentUser;
   final String _adminEmail = "agyekumpeter123@gmail.com";
 
+  @override
+  void initState() {
+    super.initState();
+    // 🟢 NEW: Run maintenance check when admin opens sidebar
+    if (user != null && user!.email == _adminEmail) {
+      AdminService.checkAndLiftExpiredRestrictions(user!.uid);
+    }
+  }
+
   Future<void> _logout(BuildContext context) async {
-    await GoogleSignIn.instance.signOut();
-    await FirebaseAuth.instance.signOut();
-    if (context.mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-        (route) => false,
-      );
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Confirm Logout'),
+          content: const Text('Are you sure you want to log out?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Logout'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      await GoogleSignIn.instance.signOut();
+      await FirebaseAuth.instance.signOut();
+      if (context.mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+          (route) => false,
+        );
+      }
     }
   }
 
@@ -289,14 +321,14 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
       backgroundColor: Colors.white,
       child: Column(
         children: [
-          // 🔴 1. REAL-TIME DATA HEADER
+          // 1. REAL-TIME DATA HEADER
           StreamBuilder<DocumentSnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('users')
                 .doc(user?.uid)
                 .snapshots(),
             builder: (context, snapshot) {
-              // --- 📊 CALCULATE SCORE ---
+              // --- CALCULATE SCORE ---
               double profileScore = 0;
               String displayName = user?.displayName ?? "Guest User";
               String? photoURL = user?.photoURL;
@@ -340,7 +372,7 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                   children: [
                     Row(
                       children: [
-                        // 📊 THE CHART: Trust Score Ring
+                        // THE CHART: Trust Score Ring
                         Stack(
                           alignment: Alignment.center,
                           children: [
@@ -464,7 +496,7 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
             },
           ),
 
-          // 2. SCROLLABLE MENU (Unchanged)
+          // 2. SCROLLABLE MENU
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -477,6 +509,13 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                   targetPage: const HomePage(),
                   isCurrent: widget.isHome,
                 ),
+                // 3. Location Settings (Restored)
+                _buildDrawerItem(
+                  context: context,
+                  icon: Icons.settings_input_antenna,
+                  title: "Discovery Settings",
+                  targetPage: const LocationSettingsPage(),
+                ),
                 _buildDrawerItem(
                   context: context,
                   icon: Icons.notifications_active_outlined,
@@ -485,7 +524,7 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                 ),
 
                 _buildSectionHeader("COMMUNICATION"),
-                // Inbox with Badge
+                // Inbox with Badge (Excluding Replies)
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('users')
@@ -505,6 +544,29 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                       icon: Icons.inbox_outlined,
                       title: "Inbox",
                       targetPage: const InboxPage(),
+                      trailing: _buildBadge(count),
+                    );
+                  },
+                ),
+                // 2. My Post Comments with Badge (Specific for Replies)
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user?.uid)
+                      .collection('notifications')
+                      .where('read', isEqualTo: false)
+                      .where('type', isEqualTo: 'reply') // Specific filter
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    int count = 0;
+                    if (snapshot.hasData) {
+                      count = snapshot.data!.docs.length;
+                    }
+                    return _buildDrawerItem(
+                      context: context,
+                      icon: Icons.comment_bank_outlined,
+                      title: "My Post Comments",
+                      targetPage: const MyPostCommentsPage(),
                       trailing: _buildBadge(count),
                     );
                   },
@@ -538,8 +600,15 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                 _buildDrawerItem(
                   context: context,
                   icon: Icons.article_outlined,
-                  title: "My Listings",
+                  title: "My Posts",
                   targetPage: const MyPostsPage(),
+                ),
+                // 1. Saved Posts (Restored)
+                _buildDrawerItem(
+                  context: context,
+                  icon: Icons.bookmark_outline,
+                  title: "Saved Items",
+                  targetPage: const SavedPostsPage(),
                 ),
                 _buildDrawerItem(
                   context: context,
@@ -566,6 +635,13 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                 ],
 
                 const Divider(height: 30),
+                // 4. Disclaimer Page (Restored)
+                _buildDrawerItem(
+                  context: context,
+                  icon: Icons.shield_outlined,
+                  title: "Safety & Terms",
+                  targetPage: const DisclaimerPage(),
+                ),
                 _buildDrawerItem(
                   context: context,
                   icon: Icons.logout,

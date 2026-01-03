@@ -12,6 +12,12 @@ class SavedPostsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
+    if (uid == null) {
+      return const Scaffold(
+        body: Center(child: Text("Please login to view saved items.")),
+      );
+    }
+
     return Scaffold(
       // 1. ADD DRAWER
       drawer: const SidebarDrawer(),
@@ -35,6 +41,11 @@ class SavedPostsPage extends StatelessWidget {
             .orderBy('saved_at', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
+          // 🛡️ CRITICAL FIX: Null & Error Checks
+          if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}"));
+          }
+
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -55,11 +66,16 @@ class SavedPostsPage extends StatelessWidget {
           final docs = snapshot.data!.docs;
 
           return ListView.separated(
+            padding: const EdgeInsets.all(12),
             itemCount: docs.length,
-            separatorBuilder: (context, index) => const Divider(height: 1),
+            separatorBuilder: (context, index) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              final data = docs[index].data() as Map<String, dynamic>;
-              final String saveDocId = docs[index].id;
+              final doc = docs[index];
+              final data = doc.data() as Map<String, dynamic>;
+              final String saveDocId = doc.id;
+              
+              // Use original_id if available, otherwise fallback to the doc ID
+              // This is crucial for navigating back to the live post
               final String originalPostId = data['original_id'] ?? saveDocId;
               final String imageUrl = data['image_url'] ?? '';
 
@@ -69,7 +85,10 @@ class SavedPostsPage extends StatelessWidget {
                 background: Container(
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 20),
-                  color: Colors.red,
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: const Icon(Icons.delete, color: Colors.white),
                 ),
                 onDismissed: (direction) async {
@@ -89,67 +108,76 @@ class SavedPostsPage extends StatelessWidget {
                     );
                   }
                 },
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
+                child: Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: imageUrl.isNotEmpty
-                        ? CachedNetworkImage(
-                            imageUrl: imageUrl,
-                            width: 60,
-                            height: 60,
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) => Container(
-                              width: 60,
-                              height: 60,
-                              color: Colors.grey[300],
-                            ),
-                            errorWidget: (context, url, error) => Container(
-                              width: 60,
-                              height: 60,
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.broken_image, size: 20),
-                            ),
-                          )
-                        : Container(
-                            width: 60,
-                            height: 60,
-                            color: Colors.grey[300],
-                            child: const Icon(Icons.image, size: 20),
-                          ),
-                  ),
-                  title: Text(
-                    data['product_name'] ?? 'Item',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    "₵ ${data['price']}",
-                    style: TextStyle(
-                      color: Colors.green[800],
-                      fontWeight: FontWeight.bold,
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
-                  ),
-                  trailing: const Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ProductDetailsPage(
-                          data: data,
-                          documentId: originalPostId,
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: imageUrl.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: imageUrl,
+                              width: 60,
+                              height: 60,
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => Container(
+                                width: 60,
+                                height: 60,
+                                color: Colors.grey[200],
+                              ),
+                              errorWidget: (context, url, error) => Container(
+                                width: 60,
+                                height: 60,
+                                color: Colors.grey[300],
+                                child: const Icon(Icons.broken_image, size: 20),
+                              ),
+                            )
+                          : Container(
+                              width: 60,
+                              height: 60,
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.image, size: 20),
+                            ),
+                    ),
+                    title: Text(
+                      data['product_name'] ?? 'Item',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        "₵ ${data['price']}",
+                        style: TextStyle(
+                          color: Colors.green[800],
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    );
-                  },
+                    ),
+                    trailing: const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: Colors.grey,
+                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ProductDetailsPage(
+                            data: data,
+                            documentId: originalPostId,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               );
             },

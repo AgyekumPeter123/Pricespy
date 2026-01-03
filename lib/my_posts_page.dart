@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'add_price_sheet.dart';
 import 'sidebar_drawer.dart';
+import 'services/post_service.dart';
 
 class MyPostsPage extends StatelessWidget {
   const MyPostsPage({super.key});
@@ -56,7 +57,7 @@ class MyPostsPage extends StatelessWidget {
         elevation: 0,
         centerTitle: true,
         title: const Text(
-          "My Listings",
+          "My Posts",
           style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
         ),
         backgroundColor: Colors.green[700],
@@ -129,12 +130,30 @@ class MyPostsPage extends StatelessWidget {
     Map<String, dynamic> data,
     String docId,
   ) {
+    // Check if image exists and is not empty
+    final String? imageUrl = data['image_url'];
+    final bool hasImage = imageUrl != null && imageUrl.isNotEmpty;
+
     return Dismissible(
       key: Key(docId),
       direction: DismissDirection.endToStart,
       confirmDismiss: (direction) => _confirmDelete(context),
-      onDismissed: (direction) {
-        FirebaseFirestore.instance.collection('posts').doc(docId).delete();
+      onDismissed: (direction) async {
+        try {
+          // 🟢 COMPREHENSIVE POST DELETION: removes post, comments, and saved references
+          await PostService().deletePostCompletely(docId);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Post deleted successfully")),
+            );
+          }
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("Failed to delete post: $e")),
+            );
+          }
+        }
       },
       background: Container(
         alignment: Alignment.centerRight,
@@ -156,32 +175,46 @@ class MyPostsPage extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                // 1. Modern Image Container
+                // 1. Modern Image Container with Logic
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    data['image_url'] ?? '',
-                    width: 80,
-                    height: 80,
-                    fit: BoxFit.cover,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        width: 80,
-                        height: 80,
-                        color: Colors.grey[200],
-                        child: const Center(
-                          child: Icon(Icons.image, color: Colors.grey),
+                  child: hasImage
+                      ? Image.network(
+                          imageUrl,
+                          width: 80,
+                          height: 80,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              width: 80,
+                              height: 80,
+                              color: Colors.grey[200],
+                              child: const Center(
+                                child: Icon(Icons.image, color: Colors.grey),
+                              ),
+                            );
+                          },
+                          errorBuilder: (c, e, s) => Container(
+                            width: 80,
+                            height: 80,
+                            color: Colors.grey[200],
+                            child: const Icon(
+                              Icons.broken_image,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        )
+                      : Container(
+                          width: 80,
+                          height: 80,
+                          color: Colors.grey[200],
+                          child: const Icon(
+                            Icons.image_not_supported,
+                            color: Colors.grey,
+                            size: 30,
+                          ),
                         ),
-                      );
-                    },
-                    errorBuilder: (c, e, s) => Container(
-                      width: 80,
-                      height: 80,
-                      color: Colors.grey[200],
-                      child: const Icon(Icons.broken_image, color: Colors.grey),
-                    ),
-                  ),
                 ),
                 const SizedBox(width: 16),
 

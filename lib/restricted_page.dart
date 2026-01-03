@@ -1,12 +1,89 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'login_page.dart'; // Import your Login Page
+import 'home_page.dart'; // Import Home Page
 
-class RestrictedPage extends StatelessWidget {
+class RestrictedPage extends StatefulWidget {
   final DateTime? until;
 
   const RestrictedPage({super.key, this.until});
+
+  @override
+  State<RestrictedPage> createState() => _RestrictedPageState();
+}
+
+class _RestrictedPageState extends State<RestrictedPage> {
+  late Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Check every minute if restriction has expired
+    _timer = Timer.periodic(const Duration(minutes: 1), (timer) async {
+      if (widget.until != null && DateTime.now().isAfter(widget.until!)) {
+        // Restriction expired, lift it
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .update({'isRestricted': false, 'restrictedUntil': null});
+
+          // Notify admin
+          await _notifyAdminRestrictionLifted(user.email ?? 'Unknown user');
+
+          // Navigate to home
+          if (mounted) {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const HomePage()),
+              (route) => false,
+            );
+          }
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _notifyAdminRestrictionLifted(String userEmail) async {
+    try {
+      // Get admin UID
+      final adminQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .where('email', isEqualTo: 'agyekumpeter123@gmail.com')
+          .limit(1)
+          .get();
+
+      if (adminQuery.docs.isNotEmpty) {
+        final adminUid = adminQuery.docs.first.id;
+
+        // Add notification to admin's inbox
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(adminUid)
+            .collection('notifications')
+            .add({
+              'message':
+                  'Restriction automatically lifted for user: $userEmail',
+              'type': 'alert',
+              'timestamp': FieldValue.serverTimestamp(),
+              'read': false,
+            });
+      }
+    } catch (e) {
+      // Ignore notification errors
+      debugPrint('Error sending admin notification: $e');
+    }
+  }
 
   Future<void> _handleLogout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
@@ -22,8 +99,8 @@ class RestrictedPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String formattedDate = until != null
-        ? DateFormat('MMMM dd, yyyy - hh:mm a').format(until!)
+    String formattedDate = widget.until != null
+        ? DateFormat('MMMM dd, yyyy - hh:mm a').format(widget.until!)
         : "Indefinitely";
 
     return Scaffold(

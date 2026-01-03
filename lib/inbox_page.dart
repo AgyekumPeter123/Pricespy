@@ -30,9 +30,7 @@ class _InboxPageState extends State<InboxPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Notification deleted"),
-          duration: Duration(
-            seconds: 2,
-          ), // Gives time to undo (if you implement undo)
+          duration: Duration(seconds: 2),
         ),
       );
     }
@@ -90,6 +88,9 @@ class _InboxPageState extends State<InboxPage> {
           .update({'read': true});
     }
 
+    // If there is no post ID (e.g. system alert), just return
+    if (postId.isEmpty) return;
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -137,6 +138,8 @@ class _InboxPageState extends State<InboxPage> {
         return Icons.check_circle_outline;
       case 'promo':
         return Icons.local_offer_outlined;
+      case 'reply':
+        return Icons.reply;
       default:
         return Icons.notifications_none;
     }
@@ -177,16 +180,15 @@ class _InboxPageState extends State<InboxPage> {
             .collection('users')
             .doc(currentUser!.uid)
             .collection('notifications')
-            // OPTIMIZATION: Filter directly in query instead of client-side
-            .where('type', isNotEqualTo: 'reply')
-            .orderBy(
-              'type',
-            ) // Firestore requires ordering by the field used in inequality filter
             .orderBy('timestamp', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return const Center(child: Text("Error loading notifications"));
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -205,7 +207,16 @@ class _InboxPageState extends State<InboxPage> {
             );
           }
 
-          final notifications = snapshot.data!.docs;
+          // Filter out chat messages if they are accidentally stored here,
+          // or handle specific types you don't want in general inbox
+          final notifications = snapshot.data!.docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return data['type'] != 'message'; // Example filter
+          }).toList();
+
+          if (notifications.isEmpty) {
+            return const Center(child: Text("No notifications"));
+          }
 
           return ListView.separated(
             itemCount: notifications.length,

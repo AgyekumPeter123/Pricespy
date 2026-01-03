@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io'; // Required for Internet Check
 import 'dart:math' show asin, atan2, cos, pi, sin;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,8 +35,20 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
   @override
   void initState() {
     super.initState();
-    _loadRadius();
-    _initLocation();
+    // 🟢 FIX: Initialize everything in order before showing the screen
+    _initPage();
+  }
+
+  Future<void> _initPage() async {
+    await _loadRadius(); // 1. Load Settings
+    await _initLocation(); // 2. Get Location & Check Connectivity
+
+    // 3. Only stop loading once we have the data needed for the button to work
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _loadRadius() async {
@@ -44,32 +57,57 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
     if (mounted) {
       setState(() {
         _radiusKm = savedRadius;
-        _isLoading = false;
       });
     }
   }
 
+  // 🟢 NEW: Robust Location & Internet Initializer
   Future<void> _initLocation() async {
-    try {
-      LocationPermission permission = await Geolocator.checkPermission();
+    // A. Check Internet
+    if (!await _hasInternet()) {
+      _showSnack("No internet connection detected.", isError: true);
+    }
+
+    // B. Check Location Service Status
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      _showSnack(
+        "Location services are disabled. Please enable GPS.",
+        isError: true,
+      );
+      // Optional: Geolocator.openLocationSettings();
+      setState(() => _contextText = "GPS is off.");
+      return;
+    }
+
+    // C. Check Permissions
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.deniedForever) {
-        setState(() {
-          _contextText = "Location disabled in settings.";
-          _isLoading = false;
-        });
+        setState(() => _contextText = "Location permissions denied.");
         return;
       }
+    }
+    if (permission == LocationPermission.deniedForever) {
+      setState(() => _contextText = "Location permissions permanently denied.");
+      return;
+    }
 
-      if (permission == LocationPermission.always ||
-          permission == LocationPermission.whileInUse) {
-        Position pos = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-        );
-        _currentPosition = pos;
+    // D. Get Position
+    try {
+      Position pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
 
+      if (mounted) {
+        setState(() {
+          _currentPosition = pos;
+        });
+      }
+
+      // E. Get Home Town Name (Requires Internet)
+      try {
         List<Placemark> marks = await placemarkFromCoordinates(
           pos.latitude,
           pos.longitude,
@@ -81,33 +119,60 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
               marks.first.administrativeArea ??
               "your area";
         }
+      } catch (_) {
+        // Silently fail name lookup if internet is flaky, but keep position
       }
     } catch (e) {
       debugPrint("Location Init Error: $e");
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // --- RESTORED HIGH-PRECISION RADAR ---
+  // Helper to check actual internet access
+  Future<bool> _hasInternet() async {
+    try {
+      final result = await InternetAddress.lookup('google.com');
+      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _showSnack(String msg, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.red[800] : Colors.green[800],
+      ),
+    );
+  }
+
+  // --- RESTORED ORIGINAL SCANNER METHOD ---
   Future<void> _checkCoverage() async {
-    if (_currentPosition == null) return;
+    if (_currentPosition == null) {
+      _initLocation(); // Try to get location again if missing
+      return;
+    }
+
+    // 🟢 CHECK INTERNET BEFORE SCANNING
+    if (!await _hasInternet()) {
+      _showSnack("Internet required for scanning towns.", isError: true);
+      setState(() => _contextText = "No Internet Connection.");
+      return;
+    }
 
     // Start new session
     final int mySessionId = ++_scanSessionId;
 
     setState(() {
       _isFetchingContext = true;
-      // FIX 1: Update text immediately to avoid confusion
       _contextText = "Scanning area...";
-      // Reset graph
       _sectorReach = {'North': 0, 'East': 0, 'South': 0, 'West': 0};
     });
 
     try {
       Position position = _currentPosition!;
 
-      // 1. High Precision: 36 bearings (every 10 degrees)
       List<double> bearings = List.generate(36, (index) => index * 10.0);
       Map<String, String> directionalFrontier = {};
       Map<String, double> tempReach = {
@@ -117,7 +182,6 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
         'West': 0,
       };
 
-      // 2. High Precision: 2km steps
       List<double> steps = [];
       for (double i = 2.0; i <= _radiusKm; i += 2.0) {
         steps.add(i);
@@ -136,13 +200,14 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
         double maxDistInSector = 0.0;
 
         for (double b in sector.value) {
-          if (mySessionId != _scanSessionId) return; // Stop if cancelled
+          if (mySessionId != _scanSessionId) return;
 
           for (double d in steps) {
-            // FIX 3: Yield to UI thread to prevent freezing
             await Future.delayed(const Duration(milliseconds: 10));
 
             String? town = await _getTownAtRadius(position, d, b);
+
+            // 🟢 ORIGINAL LOGIC
             if (town != null && town.isNotEmpty && town != _homeTown) {
               lastFoundTown = town;
               if (d > maxDistInSector) maxDistInSector = d;
@@ -231,12 +296,7 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('search_radius', _radiusKm);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Radius set to ${_radiusKm.toInt()}km."),
-          backgroundColor: Colors.green[800],
-        ),
-      );
+      _showSnack("Radius set to ${_radiusKm.toInt()}km.");
       Navigator.pop(context);
     }
   }
@@ -251,7 +311,7 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
         foregroundColor: Colors.white,
         leading: Builder(
           builder: (context) => IconButton(
-            icon: const Icon(Icons.sort), // <--- The Sort Icon you wanted
+            icon: const Icon(Icons.sort),
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),
@@ -302,8 +362,7 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
                             _radiusKm = val;
                             _contextText = "Radius changed. Tap to scan.";
                             _isFetchingContext = false;
-                            _scanSessionId++; // Stop any current scan
-                            // Reset graph visualization
+                            _scanSessionId++;
                             _sectorReach = {
                               'North': 0,
                               'East': 0,
@@ -318,7 +377,12 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
                     const SizedBox(height: 20),
 
                     ElevatedButton.icon(
-                      onPressed: _isFetchingContext ? null : _checkCoverage,
+                      // 🟢 Button is ONLY enabled if we are not fetching context
+                      // AND we successfully got the current position
+                      onPressed:
+                          (_isFetchingContext || _currentPosition == null)
+                          ? null
+                          : _checkCoverage,
                       icon: _isFetchingContext
                           ? const SizedBox(
                               width: 16,
@@ -330,7 +394,11 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
                             )
                           : const Icon(Icons.radar),
                       label: Text(
-                        _isFetchingContext ? "SCANNING..." : "CHECK COVERAGE",
+                        _isFetchingContext
+                            ? "SCANNING..."
+                            : (_currentPosition == null
+                                  ? "LOCATING..."
+                                  : "CHECK COVERAGE"),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue[600],
@@ -344,7 +412,7 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
 
                     const SizedBox(height: 30),
 
-                    // --- NEW GRAPH WIDGET ---
+                    // --- GRAPH WIDGET ---
                     SizedBox(
                       height: 220,
                       width: 220,
@@ -455,7 +523,7 @@ class _RadarChartPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
 
-    // 1. Draw Background Circles (Targets)
+    // 1. Draw Background Circles
     canvas.drawCircle(center, radius, bgLinePaint);
     canvas.drawCircle(center, radius * 0.66, bgLinePaint);
     canvas.drawCircle(center, radius * 0.33, bgLinePaint);
@@ -522,11 +590,8 @@ class _RadarChartPainter extends CustomPainter {
 
   double _normalize(double val) {
     if (val <= 0) return 0;
-    // Map distance to visual radius.
-    // Even small reach should show a little bit (min 10%).
     double ratio = val / maxRadius;
     if (ratio > 1.0) ratio = 1.0;
-    // Scale to visual size
     return ratio *
         (maxRadius > 0 ? 1 : 0) *
         110.0; // 110 is half of widget size roughly
