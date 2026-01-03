@@ -1,4 +1,5 @@
 import 'dart:async'; // Required for Timer
+import 'dart:math'; // Required for max()
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -31,7 +32,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
   Timer? _debounce;
   Stream<QuerySnapshot>? _postsStream;
 
-  // 🟢 Cache posts to prevent UI collapse during filter switches
+  // Cache posts to prevent UI collapse during filter switches
   List<DocumentSnapshot> _cachedPosts = [];
 
   @override
@@ -93,7 +94,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
     });
   }
 
-  // --- 🟢 FIXED FILTER LOGIC ---
+  // --- FILTER LOGIC ---
   List<DocumentSnapshot> _filterPosts(List<DocumentSnapshot> docs) {
     // 1. Filter out deleted or non-existent docs immediately
     var validDocs = docs.where((doc) => doc.exists).toList();
@@ -114,7 +115,6 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
       }
 
       // 3. Client-Side Filters (Comments)
-      // We rely on 'last_comment_time'. If it exists, the post has comments.
       if (_selectedFilter == "With Comments") {
         return data['last_comment_time'] != null;
       } else if (_selectedFilter == "No Comments") {
@@ -186,6 +186,13 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
           categoryCount[type] = (categoryCount[type] ?? 0) + 1;
         }
 
+        // Find max Y for graph scaling
+        double maxY = 5.0; // Minimum height
+        if (categoryCount.isNotEmpty) {
+          int maxVal = categoryCount.values.reduce(max);
+          maxY = (maxVal * 1.2).toDouble(); // Add 20% headroom
+        }
+
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           padding: const EdgeInsets.all(16),
@@ -212,75 +219,185 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Stats Cards
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
+
+              // 🟢 NEW LAYOUT: 2 Top (Split), 1 Bottom (Full)
+              Column(
                 children: [
-                  _buildStatCardWrapper(
-                    "Total Posts",
-                    totalPosts.toString(),
-                    Icons.article,
-                    Colors.blue,
+                  Row(
+                    children: [
+                      // Total Posts
+                      Expanded(
+                        child: _buildStatCard(
+                          "Total Posts",
+                          totalPosts.toString(),
+                          Icons.article,
+                          Colors.blue,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Today
+                      Expanded(
+                        child: _buildStatCard(
+                          "Today",
+                          postsToday.toString(),
+                          Icons.today,
+                          Colors.green,
+                        ),
+                      ),
+                    ],
                   ),
-                  _buildStatCardWrapper(
-                    "Today",
-                    postsToday.toString(),
-                    Icons.today,
-                    Colors.green,
-                  ),
-                  _buildStatCardWrapper(
-                    "This Week",
-                    postsThisWeek.toString(),
-                    Icons.calendar_view_week,
-                    Colors.orange,
+                  const SizedBox(height: 12),
+                  // This Week (Stretched)
+                  SizedBox(
+                    width: double.infinity,
+                    child: _buildStatCard(
+                      "This Week",
+                      postsThisWeek.toString(),
+                      Icons.calendar_view_week,
+                      Colors.orange,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
 
-              // 🟢 Category Pie Chart
-              if (categoryCount.isNotEmpty)
-                SizedBox(
-                  height: 200,
-                  child: PieChart(
-                    PieChartData(
-                      sections: categoryCount.entries.map((entry) {
-                        final isShop = entry.key == 'Shop';
-                        return PieChartSectionData(
-                          value: entry.value.toDouble(),
-                          title: '${entry.key}\n${entry.value}',
-                          color: isShop ? Colors.purple : Colors.teal,
-                          radius: 80,
-                          titleStyle: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                          titlePositionPercentageOffset: 0.55,
-                        );
-                      }).toList(),
-                      sectionsSpace: 2,
-                      centerSpaceRadius: 30,
+              const SizedBox(height: 24),
+
+              // 🟢 NEW MODERN BAR GRAPH
+              if (categoryCount.isNotEmpty) ...[
+                const Padding(
+                  padding: EdgeInsets.only(left: 4, bottom: 10),
+                  child: Text(
+                    "User Distribution",
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey,
                     ),
                   ),
                 ),
+                SizedBox(
+                  height: 200,
+                  child: BarChart(
+                    BarChartData(
+                      alignment: BarChartAlignment.spaceEvenly,
+                      maxY: maxY,
+                      barTouchData: BarTouchData(
+                        enabled: true,
+                        touchTooltipData: BarTouchTooltipData(
+                          // 🟢 FIX: Updated from tooltipBgColor to getTooltipColor
+                          getTooltipColor: (group) => Colors.blueGrey,
+                          getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                            String label = group.x == 0 ? 'Individual' : 'Shop';
+                            return BarTooltipItem(
+                              '$label\n',
+                              const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              children: <TextSpan>[
+                                TextSpan(
+                                  text: (rod.toY).toInt().toString(),
+                                  style: const TextStyle(
+                                    color: Colors.yellow,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                      titlesData: FlTitlesData(
+                        show: true,
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 30,
+                            getTitlesWidget: (value, meta) {
+                              const style = TextStyle(
+                                color: Colors.black87,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              );
+                              String text = '';
+                              if (value.toInt() == 0) text = 'Individual';
+                              if (value.toInt() == 1) text = 'Shop';
+                              return SideTitleWidget(
+                                axisSide: meta.axisSide,
+                                space: 4,
+                                child: Text(text, style: style),
+                              );
+                            },
+                          ),
+                        ),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        topTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                      ),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: maxY / 5,
+                        getDrawingHorizontalLine: (value) =>
+                            FlLine(color: Colors.grey[200], strokeWidth: 1),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      barGroups: [
+                        // Individual Bar
+                        BarChartGroupData(
+                          x: 0,
+                          barRods: [
+                            BarChartRodData(
+                              toY: (categoryCount['Individual'] ?? 0)
+                                  .toDouble(),
+                              color: Colors.teal,
+                              width: 30,
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(8),
+                              ),
+                              backDrawRodData: BackgroundBarChartRodData(
+                                show: true,
+                                toY: maxY,
+                                color: Colors.grey[100],
+                              ),
+                            ),
+                          ],
+                        ),
+                        // Shop Bar
+                        BarChartGroupData(
+                          x: 1,
+                          barRods: [
+                            BarChartRodData(
+                              toY: (categoryCount['Shop'] ?? 0).toDouble(),
+                              color: Colors.purple,
+                              width: 30,
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(8),
+                              ),
+                              backDrawRodData: BackgroundBarChartRodData(
+                                show: true,
+                                toY: maxY,
+                                color: Colors.grey[100],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         );
       },
-    );
-  }
-
-  Widget _buildStatCardWrapper(
-    String title,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
-    return SizedBox(
-      width: (MediaQuery.of(context).size.width - 64) / 3, // Distribute evenly
-      child: _buildStatCard(title, value, icon, color),
     );
   }
 
@@ -291,30 +408,38 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
     Color color,
   ) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 6),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: color.withOpacity(0.8),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           Text(
             value,
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
               color: color,
             ),
-          ),
-          Text(
-            title,
-            style: TextStyle(fontSize: 10, color: color.withOpacity(0.8)),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

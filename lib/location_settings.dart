@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io'; // Required for Internet Check
+import 'dart:io';
 import 'dart:math' show asin, atan2, cos, pi, sin;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,16 +15,21 @@ class LocationSettingsPage extends StatefulWidget {
 }
 
 class _LocationSettingsPageState extends State<LocationSettingsPage> {
+  // --- STATE VARIABLES ---
   double _radiusKm = 20.0;
-  bool _isLoading = true;
+
+  // Location State
   Position? _currentPosition;
-  late String _homeTown = "your area";
+  String _locationStatus = "Waiting for update...";
+  bool _isLocating = false; // Specific loader for GPS
+  String _homeTown = "Unknown Area";
 
-  String _contextText = "Tap 'Check Coverage' to see reachable towns.";
-  bool _isFetchingContext = false;
+  // Scanner State
+  bool _isScanning = false; // Specific loader for Radar
   int _scanSessionId = 0;
+  String _radarDescription = "Scan to see detailed coverage report.";
 
-  // Data for the Graph
+  // Graph Data
   Map<String, double> _sectorReach = {
     'North': 0,
     'East': 0,
@@ -35,146 +40,120 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
   @override
   void initState() {
     super.initState();
-    // 🟢 FIX: Initialize everything in order before showing the screen
-    _initPage();
-  }
+    // 1. Load settings instantly
+    _loadRadius();
 
-  Future<void> _initPage() async {
-    await _loadRadius(); // 1. Load Settings
-    await _initLocation(); // 2. Get Location & Check Connectivity
-
-    // 3. Only stop loading once we have the data needed for the button to work
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-    }
+    // 2. Trigger location fetch in background (doesn't block UI)
+    // We delay slightly to let the build finish first for smoothness
+    Future.delayed(const Duration(milliseconds: 500), () {
+      _updateLocation();
+    });
   }
 
   Future<void> _loadRadius() async {
     final prefs = await SharedPreferences.getInstance();
-    double savedRadius = prefs.getDouble('search_radius') ?? 20.0;
     if (mounted) {
       setState(() {
-        _radiusKm = savedRadius;
+        _radiusKm = prefs.getDouble('search_radius') ?? 20.0;
       });
     }
   }
 
-  // 🟢 NEW: Robust Location & Internet Initializer
-  Future<void> _initLocation() async {
-    // A. Check Internet
-    if (!await _hasInternet()) {
-      _showSnack("No internet connection detected.", isError: true);
-    }
+  // 🟢 ACTION: Get GPS & Internet & Town Name
+  Future<void> _updateLocation() async {
+    setState(() {
+      _isLocating = true;
+      _locationStatus = "Acquiring GPS...";
+    });
 
-    // B. Check Location Service Status
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      _showSnack(
-        "Location services are disabled. Please enable GPS.",
-        isError: true,
-      );
-      // Optional: Geolocator.openLocationSettings();
-      setState(() => _contextText = "GPS is off.");
-      return;
-    }
-
-    // C. Check Permissions
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        setState(() => _contextText = "Location permissions denied.");
+    try {
+      // 1. Check Internet
+      try {
+        final result = await InternetAddress.lookup('google.com');
+        if (result.isEmpty || result[0].rawAddress.isEmpty) throw Exception();
+      } catch (_) {
+        setState(() {
+          _locationStatus = "No Internet Connection";
+          _isLocating = false;
+        });
+        _showSnack("Internet required to identify towns.", isError: true);
         return;
       }
-    }
-    if (permission == LocationPermission.deniedForever) {
-      setState(() => _contextText = "Location permissions permanently denied.");
-      return;
-    }
 
-    // D. Get Position
-    try {
+      // 2. Check Permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          setState(() {
+            _locationStatus = "Permission Denied";
+            _isLocating = false;
+          });
+          return;
+        }
+      }
+
+      // 3. Get Position
       Position pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      if (mounted) {
-        setState(() {
-          _currentPosition = pos;
-        });
-      }
-
-      // E. Get Home Town Name (Requires Internet)
+      // 4. Get Town Name
+      String detectedTown = "Unknown Area";
       try {
         List<Placemark> marks = await placemarkFromCoordinates(
           pos.latitude,
           pos.longitude,
         );
         if (marks.isNotEmpty) {
-          _homeTown =
+          detectedTown =
               marks.first.locality ??
               marks.first.subLocality ??
               marks.first.administrativeArea ??
-              "your area";
+              "Rural Area";
         }
-      } catch (_) {
-        // Silently fail name lookup if internet is flaky, but keep position
+      } catch (e) {
+        debugPrint("Geocoding failed: $e");
+      }
+
+      if (mounted) {
+        setState(() {
+          _currentPosition = pos;
+          _homeTown = detectedTown;
+          _locationStatus = "Active";
+          _isLocating = false;
+        });
       }
     } catch (e) {
-      debugPrint("Location Init Error: $e");
+      if (mounted) {
+        setState(() {
+          _locationStatus = "GPS Error";
+          _isLocating = false;
+        });
+        _showSnack("Could not get location: $e", isError: true);
+      }
     }
   }
 
-  // Helper to check actual internet access
-  Future<bool> _hasInternet() async {
-    try {
-      final result = await InternetAddress.lookup('google.com');
-      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  void _showSnack(String msg, {bool isError = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: isError ? Colors.red[800] : Colors.green[800],
-      ),
-    );
-  }
-
-  // --- RESTORED ORIGINAL SCANNER METHOD ---
+  // 🟢 ACTION: Radar Scan Logic
   Future<void> _checkCoverage() async {
-    if (_currentPosition == null) {
-      _initLocation(); // Try to get location again if missing
-      return;
-    }
+    if (_currentPosition == null) return;
 
-    // 🟢 CHECK INTERNET BEFORE SCANNING
-    if (!await _hasInternet()) {
-      _showSnack("Internet required for scanning towns.", isError: true);
-      setState(() => _contextText = "No Internet Connection.");
-      return;
-    }
-
-    // Start new session
     final int mySessionId = ++_scanSessionId;
 
     setState(() {
-      _isFetchingContext = true;
-      _contextText = "Scanning area...";
+      _isScanning = true;
+      _radarDescription = "Scanning surrounding areas...";
       _sectorReach = {'North': 0, 'East': 0, 'South': 0, 'West': 0};
     });
 
     try {
       Position position = _currentPosition!;
-
       List<double> bearings = List.generate(36, (index) => index * 10.0);
-      Map<String, String> directionalFrontier = {};
+
+      // Store the furthest town name found in each direction
+      Map<String, String> distinctTowns = {};
+
       Map<String, double> tempReach = {
         'North': 0,
         'East': 0,
@@ -183,10 +162,8 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
       };
 
       List<double> steps = [];
-      for (double i = 2.0; i <= _radiusKm; i += 2.0) {
-        steps.add(i);
-      }
-      if (steps.isEmpty || steps.last != _radiusKm) steps.add(_radiusKm);
+      for (double i = 2.0; i <= _radiusKm; i += 2.0) steps.add(i);
+      if (steps.isEmpty) steps.add(_radiusKm);
 
       Map<String, List<double>> cardinalSectors = {
         'North': bearings.where((b) => b >= 315 || b <= 45).toList(),
@@ -196,62 +173,55 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
       };
 
       for (var sector in cardinalSectors.entries) {
-        String? lastFoundTown;
-        double maxDistInSector = 0.0;
+        String? furthestTown;
+        double maxDist = 0.0;
 
         for (double b in sector.value) {
           if (mySessionId != _scanSessionId) return;
 
           for (double d in steps) {
-            await Future.delayed(const Duration(milliseconds: 10));
+            await Future.delayed(const Duration(milliseconds: 5)); // UI Breath
 
             String? town = await _getTownAtRadius(position, d, b);
 
-            // 🟢 ORIGINAL LOGIC
             if (town != null && town.isNotEmpty && town != _homeTown) {
-              lastFoundTown = town;
-              if (d > maxDistInSector) maxDistInSector = d;
+              furthestTown = town;
+              if (d > maxDist) maxDist = d;
             }
           }
         }
 
-        tempReach[sector.key] = maxDistInSector;
-
-        if (lastFoundTown != null) {
-          double beyond = _radiusKm - maxDistInSector;
-          directionalFrontier[sector.key] = beyond > 2.0
-              ? "$lastFoundTown (+${beyond.toInt()}km)"
-              : lastFoundTown;
-        } else {
-          directionalFrontier[sector.key] = "Rural";
+        tempReach[sector.key] = maxDist;
+        if (furthestTown != null) {
+          distinctTowns[sector.key] = furthestTown;
         }
       }
 
       if (mySessionId != _scanSessionId) return;
 
-      List<String> summary = [];
-      directionalFrontier.forEach((dir, info) {
-        if (info != "Rural") summary.add("$dir: $info");
-      });
+      // 🟢 Generate Descriptive Text
+      StringBuffer sb = StringBuffer();
+      if (distinctTowns.isEmpty) {
+        sb.write(
+          "No major towns found nearby. You are likely in a rural area or deep within $_homeTown.",
+        );
+      } else {
+        sb.write("Coverage Analysis:\n");
+        distinctTowns.forEach((dir, town) {
+          double dist = tempReach[dir]!;
+          sb.write("• $dir extends ${dist.toInt()}km to $town.\n");
+        });
+      }
 
       if (mounted) {
         setState(() {
           _sectorReach = tempReach;
-          if (summary.isEmpty) {
-            _contextText = "No major towns found nearby (Rural Area).";
-          } else {
-            _contextText = "Reach: ${summary.join(', ')}";
-          }
-          _isFetchingContext = false;
+          _radarDescription = sb.toString();
+          _isScanning = false;
         });
       }
     } catch (e) {
-      if (mySessionId == _scanSessionId && mounted) {
-        setState(() {
-          _contextText = "Could not verify coverage area.";
-          _isFetchingContext = false;
-        });
-      }
+      if (mounted) setState(() => _isScanning = false);
     }
   }
 
@@ -279,14 +249,9 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
         lon2 * (180 / pi),
       );
       if (marks.isNotEmpty) {
-        Placemark p = marks[0];
-        String? name = p.locality ?? p.subLocality ?? p.name;
-        if (name != null &&
-            name.length > 2 &&
-            !name.contains('+') &&
-            name.toLowerCase() != "unnamed road") {
-          return name;
-        }
+        return marks.first.locality ??
+            marks.first.subLocality ??
+            marks.first.name;
       }
     } catch (_) {}
     return null;
@@ -295,10 +260,25 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
   Future<void> _applySettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('search_radius', _radiusKm);
-    if (mounted) {
-      _showSnack("Radius set to ${_radiusKm.toInt()}km.");
-      Navigator.pop(context);
+
+    // Optional: Save last known town to keep state consistent across restarts
+    if (_homeTown != "Unknown Area") {
+      await prefs.setString('last_known_town', _homeTown);
     }
+
+    if (mounted) {
+      _showSnack("✅ Settings saved successfully!");
+      // 🟢 REMOVED: Navigator.pop(context); -> Stay on page
+    }
+  }
+
+  void _showSnack(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.red[800] : Colors.green[800],
+      ),
+    );
   }
 
   @override
@@ -316,187 +296,219 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
           ),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // --- 1. SETTINGS SECTION ---
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "Search Radius",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "Show items within ${_radiusKm.toInt()} km of your location.",
+                  style: TextStyle(color: Colors.grey[600], fontSize: 15),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  activeTrackColor: Colors.green[800],
+                  thumbColor: Colors.green[800],
+                  overlayColor: Colors.green.withOpacity(0.2),
+                  valueIndicatorColor: Colors.green[800],
+                ),
+                child: Slider(
+                  value: _radiusKm,
+                  min: 1,
+                  max: 100,
+                  divisions: 99,
+                  label: "${_radiusKm.toInt()} km",
+                  onChanged: (val) {
+                    setState(() {
+                      _radiusKm = val;
+                      _radarDescription = "Radius changed. Update Scan.";
+                      // Reset graph visual
+                      _sectorReach = {
+                        'North': 0,
+                        'East': 0,
+                        'South': 0,
+                        'West': 0,
+                      };
+                    });
+                  },
+                ),
+              ),
+
+              const Divider(height: 40),
+
+              // --- 2. LOCATION STATUS SECTION ---
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
                   children: [
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        "Search Radius",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    Icon(
+                      Icons.place,
+                      color: _currentPosition == null
+                          ? Colors.grey
+                          : Colors.red,
+                      size: 30,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _homeTown,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          Text(
+                            _locationStatus,
+                            style: TextStyle(
+                              color: _isLocating
+                                  ? Colors.orange
+                                  : Colors.grey[600],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        "Show items within ${_radiusKm.toInt()} km of your location.",
-                        style: TextStyle(color: Colors.grey[600], fontSize: 15),
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-
-                    SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        activeTrackColor: Colors.green[800],
-                        thumbColor: Colors.green[800],
-                        overlayColor: Colors.green.withOpacity(0.2),
-                        valueIndicatorColor: Colors.green[800],
-                      ),
-                      child: Slider(
-                        value: _radiusKm,
-                        min: 1,
-                        max: 100,
-                        divisions: 99,
-                        label: "${_radiusKm.toInt()} km",
-                        onChanged: (val) {
-                          setState(() {
-                            _radiusKm = val;
-                            _contextText = "Radius changed. Tap to scan.";
-                            _isFetchingContext = false;
-                            _scanSessionId++;
-                            _sectorReach = {
-                              'North': 0,
-                              'East': 0,
-                              'South': 0,
-                              'West': 0,
-                            };
-                          });
-                        },
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    ElevatedButton.icon(
-                      // 🟢 Button is ONLY enabled if we are not fetching context
-                      // AND we successfully got the current position
-                      onPressed:
-                          (_isFetchingContext || _currentPosition == null)
-                          ? null
-                          : _checkCoverage,
-                      icon: _isFetchingContext
+                    IconButton(
+                      onPressed: _isLocating ? null : _updateLocation,
+                      icon: _isLocating
                           ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(Icons.radar),
-                      label: Text(
-                        _isFetchingContext
-                            ? "SCANNING..."
-                            : (_currentPosition == null
-                                  ? "LOCATING..."
-                                  : "CHECK COVERAGE"),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[600],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 30),
-
-                    // --- GRAPH WIDGET ---
-                    SizedBox(
-                      height: 220,
-                      width: 220,
-                      child: CustomPaint(
-                        painter: _RadarChartPainter(
-                          data: _sectorReach,
-                          maxRadius: _radiusKm,
-                        ),
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.my_location,
-                                color: Colors.green[800],
-                                size: 24,
-                              ),
-                              if (_isFetchingContext)
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 4),
-                                  child: Text(
-                                    "Scanning...",
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[50],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue[100]!),
-                      ),
-                      child: Text(
-                        _contextText,
-                        style: TextStyle(
-                          color: Colors.blue[900],
-                          fontWeight: FontWeight.w500,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 40),
-
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[800],
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: _applySettings,
-                        child: const Text(
-                          "SAVE CHANGES",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                          : const Icon(Icons.refresh, color: Colors.blue),
+                      tooltip: "Update Location",
                     ),
                   ],
                 ),
               ),
-            ),
+
+              const SizedBox(height: 20),
+
+              // --- 3. SCANNER BUTTON ---
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed:
+                      (_isScanning || _isLocating || _currentPosition == null)
+                      ? null
+                      : _checkCoverage,
+                  icon: _isScanning
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.radar),
+                  label: Text(_isScanning ? "SCANNING..." : "CHECK COVERAGE"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[600],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 30),
+
+              // --- 4. VISUALIZATION & DESCRIPTION ---
+              SizedBox(
+                height: 220,
+                width: 220,
+                child: CustomPaint(
+                  painter: _RadarChartPainter(
+                    data: _sectorReach,
+                    maxRadius: _radiusKm,
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.my_location,
+                      color: Colors.green[800],
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Descriptive Text Box
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue[100]!),
+                ),
+                child: Text(
+                  _radarDescription,
+                  style: TextStyle(
+                    color: Colors.blue[900],
+                    fontWeight: FontWeight.w500,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 40),
+
+              // --- 5. SAVE BUTTON ---
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[800],
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: _applySettings,
+                  child: const Text(
+                    "SAVE CHANGES",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
 
-// --- PAINTER FOR THE GRAPH ---
+// --- PAINTER REMAINS SAME ---
 class _RadarChartPainter extends CustomPainter {
   final Map<String, double> data;
   final double maxRadius;
@@ -508,27 +520,22 @@ class _RadarChartPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
 
-    // Paints
     final bgLinePaint = Paint()
       ..color = Colors.grey.withOpacity(0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-
     final fillPaint = Paint()
       ..color = Colors.green.withOpacity(0.2)
       ..style = PaintingStyle.fill;
-
     final borderPaint = Paint()
       ..color = Colors.green[700]!
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
 
-    // 1. Draw Background Circles
     canvas.drawCircle(center, radius, bgLinePaint);
     canvas.drawCircle(center, radius * 0.66, bgLinePaint);
     canvas.drawCircle(center, radius * 0.33, bgLinePaint);
 
-    // 2. Draw Axes
     canvas.drawLine(
       Offset(center.dx, 0),
       Offset(center.dx, size.height),
@@ -540,7 +547,6 @@ class _RadarChartPainter extends CustomPainter {
       bgLinePaint,
     );
 
-    // Labels
     TextPainter tp = TextPainter(textDirection: TextDirection.ltr);
     void drawLabel(String text, Offset offset) {
       tp.text = TextSpan(
@@ -563,25 +569,11 @@ class _RadarChartPainter extends CustomPainter {
     drawLabel("E", Offset(size.width - 10, center.dy));
     drawLabel("W", Offset(10, center.dy));
 
-    // 3. Draw Coverage Shape
     final path = Path();
-
-    // North (Top, -90 deg)
-    double rN = _normalize(data['North']!);
-    path.moveTo(center.dx, center.dy - rN);
-
-    // East (Right, 0 deg)
-    double rE = _normalize(data['East']!);
-    path.lineTo(center.dx + rE, center.dy);
-
-    // South (Bottom, 90 deg)
-    double rS = _normalize(data['South']!);
-    path.lineTo(center.dx, center.dy + rS);
-
-    // West (Left, 180 deg)
-    double rW = _normalize(data['West']!);
-    path.lineTo(center.dx - rW, center.dy);
-
+    path.moveTo(center.dx, center.dy - _normalize(data['North']!));
+    path.lineTo(center.dx + _normalize(data['East']!), center.dy);
+    path.lineTo(center.dx, center.dy + _normalize(data['South']!));
+    path.lineTo(center.dx - _normalize(data['West']!), center.dy);
     path.close();
 
     canvas.drawPath(path, fillPaint);
@@ -592,9 +584,7 @@ class _RadarChartPainter extends CustomPainter {
     if (val <= 0) return 0;
     double ratio = val / maxRadius;
     if (ratio > 1.0) ratio = 1.0;
-    return ratio *
-        (maxRadius > 0 ? 1 : 0) *
-        110.0; // 110 is half of widget size roughly
+    return ratio * (maxRadius > 0 ? 1 : 0) * 110.0;
   }
 
   @override
