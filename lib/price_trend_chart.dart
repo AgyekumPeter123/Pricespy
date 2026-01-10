@@ -210,12 +210,16 @@ class _PriceTrendChartState extends State<PriceTrendChart> {
                 lineTouchData: LineTouchData(
                   handleBuiltInTouches: true,
                   touchTooltipData: LineTouchTooltipData(
+                    // 🟢 FIX: Ensure tooltip fits inside the chart boundaries
+                    fitInsideHorizontally: true,
+                    fitInsideVertically: true,
                     getTooltipColor: (touchedSpot) => Colors.blueGrey,
                     getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
                       return touchedBarSpots.map((barSpot) {
                         final flSpot = barSpot;
                         return LineTooltipItem(
-                          '₵${flSpot.y.toInt()} \n Tap to view',
+                          // 🟢 FIX: Removed "Tap to view", showing only price
+                          '₵${flSpot.y.toInt()}',
                           const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
