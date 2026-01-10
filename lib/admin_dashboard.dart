@@ -15,7 +15,7 @@ import 'encryption_service.dart';
 import 'services/post_service.dart';
 import 'admin_posts_tab.dart';
 import 'admin_user_posts_page.dart';
-import 'admin_service.dart'; // 🟢 Added for AdminService
+import 'admin_service.dart';
 
 enum UserFilter { all, active, restricted }
 
@@ -42,7 +42,6 @@ class _AdminDashboardState extends State<AdminDashboard>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
 
-    // 🟢 NEW: Check expirations when switching to the USERS tab (index 1)
     _tabController.addListener(() {
       if (_tabController.index == 1 && !_tabController.indexIsChanging) {
         final user = FirebaseAuth.instance.currentUser;
@@ -108,7 +107,6 @@ class _AdminDashboardState extends State<AdminDashboard>
     String productName,
   ) async {
     try {
-      // 🟢 COMPREHENSIVE POST DELETION
       await PostService().deletePostCompletely(
         postId,
         reportId: reportId,
@@ -391,12 +389,8 @@ class _AdminDashboardState extends State<AdminDashboard>
 
   Future<void> _deleteUserRecord(String userId) async {
     try {
-      // 🟢 DELETE ALL USER POSTS COMPLETELY
       await PostService().deleteAllUserPosts(userId);
-
-      // Delete the user document
       await FirebaseFirestore.instance.collection('users').doc(userId).delete();
-
       _showSnackBar(
         "User account and all associated posts deleted permanently.",
       );
@@ -464,7 +458,6 @@ class _AdminDashboardState extends State<AdminDashboard>
         }
         final docs = snapshot.data!.docs;
 
-        // Analytics Logic
         Map<String, int> reasonCounts = {};
         for (var doc in docs) {
           String r = (doc.data() as Map)['reason'] ?? 'Other';
@@ -689,26 +682,16 @@ class _AdminDashboardState extends State<AdminDashboard>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _buildStatItem(
-                        "All Users",
-                        "$total",
-                        Colors.blue.shade700,
-                        isActive: _currentUserFilter == UserFilter.all,
-                        onTap: () =>
-                            setState(() => _currentUserFilter = UserFilter.all),
-                      ),
-                      Container(
-                        width: 1,
-                        height: 40,
-                        color: Colors.grey.shade300,
-                      ),
-                      _buildStatItem(
-                        "Active Users",
-                        "$active",
-                        Colors.green.shade700,
-                        isActive: _currentUserFilter == UserFilter.active,
-                        onTap: () => setState(
-                          () => _currentUserFilter = UserFilter.active,
+                      // 🟢 FIXED: Wrapped items in Expanded to prevent overflow
+                      Expanded(
+                        child: _buildStatItem(
+                          "All Users",
+                          "$total",
+                          Colors.blue.shade700,
+                          isActive: _currentUserFilter == UserFilter.all,
+                          onTap: () => setState(
+                            () => _currentUserFilter = UserFilter.all,
+                          ),
                         ),
                       ),
                       Container(
@@ -716,13 +699,31 @@ class _AdminDashboardState extends State<AdminDashboard>
                         height: 40,
                         color: Colors.grey.shade300,
                       ),
-                      _buildStatItem(
-                        "Restricted",
-                        "$restricted",
-                        Colors.red.shade700,
-                        isActive: _currentUserFilter == UserFilter.restricted,
-                        onTap: () => setState(
-                          () => _currentUserFilter = UserFilter.restricted,
+                      Expanded(
+                        child: _buildStatItem(
+                          "Active", // Shortened label
+                          "$active",
+                          Colors.green.shade700,
+                          isActive: _currentUserFilter == UserFilter.active,
+                          onTap: () => setState(
+                            () => _currentUserFilter = UserFilter.active,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 40,
+                        color: Colors.grey.shade300,
+                      ),
+                      Expanded(
+                        child: _buildStatItem(
+                          "Restricted",
+                          "$restricted",
+                          Colors.red.shade700,
+                          isActive: _currentUserFilter == UserFilter.restricted,
+                          onTap: () => setState(
+                            () => _currentUserFilter = UserFilter.restricted,
+                          ),
                         ),
                       ),
                     ],
@@ -840,7 +841,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         decoration: BoxDecoration(
           color: isActive ? color.withOpacity(0.1) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
@@ -861,6 +862,7 @@ class _AdminDashboardState extends State<AdminDashboard>
             ),
             Text(
               label,
+              textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
                 color: isActive ? color : Colors.grey.shade600,

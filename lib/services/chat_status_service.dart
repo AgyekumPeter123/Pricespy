@@ -7,10 +7,9 @@ class ChatStatusService {
 
   ChatStatusService({required this.currentUserId});
 
-  /// Properly clean up any resources if needed
   void dispose() {}
 
-  /// This is called by the global LifeCycleManager when the app is opened or minimized.
+  /// Call this when app resumes/opens
   Future<void> setUserOnline(bool isOnline) async {
     try {
       await _firestore.collection('users').doc(currentUserId).update({
@@ -22,15 +21,22 @@ class ChatStatusService {
     }
   }
 
-  /// Provides a stream to listen to a specific user's online status.
-  /// Used by the ChatScreen AppBar to show the "Online/Offline" sub-header.
+  // 🟢 NEW: Call this BEFORE signing out!
+  Future<void> goOffline() async {
+    try {
+      await _firestore.collection('users').doc(currentUserId).update({
+        'isOnline': false,
+        'lastSeen': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint("Error going offline: $e");
+    }
+  }
+
   Stream<DocumentSnapshot> getUserPresenceStream(String userId) {
     return _firestore.collection('users').doc(userId).snapshots();
   }
 
-  // --- 🟡 TYPING INDICATOR METHODS ---
-
-  /// Sets whether the current user is currently typing in a specific chat.
   Future<void> setTypingStatus(String chatId, bool isTyping) async {
     try {
       await _firestore
@@ -47,7 +53,6 @@ class ChatStatusService {
     }
   }
 
-  /// Listens to the other participant's typing status in a chat.
   Stream<bool> getOtherUserTypingStream(String chatId, String otherUserId) {
     return _firestore
         .collection('chats')
@@ -63,14 +68,8 @@ class ChatStatusService {
         });
   }
 
-  // --- 🔵 MESSAGE STATUS LOGIC (TICKS) ---
-
-  /// GLOBAL DELIVERY SWEEP:
-  /// Updates all incoming 'sent' messages to 'delivered' across all conversations.
-  /// Called by LifeCycleManager the moment the user resumes the app.
   Future<void> markAllAsDelivered() async {
     try {
-      // 1. Find all chats where the user is a visible participant
       final chatsSnapshot = await _firestore
           .collection('chats')
           .where('visibleFor', arrayContains: currentUserId)
@@ -79,7 +78,6 @@ class ChatStatusService {
       if (chatsSnapshot.docs.isEmpty) return;
 
       for (var chatDoc in chatsSnapshot.docs) {
-        // 2. Find messages sent to ME that are currently only 'sent' (1 tick)
         final messagesSnapshot = await chatDoc.reference
             .collection('messages')
             .where('receiverId', isEqualTo: currentUserId)
@@ -91,8 +89,6 @@ class ChatStatusService {
           for (var doc in messagesSnapshot.docs) {
             batch.update(doc.reference, {'status': 'delivered'});
           }
-
-          // 3. Update parent Chat document for double grey ticks in the list view
           batch.update(chatDoc.reference, {'lastMessageStatus': 'delivered'});
           await batch.commit();
         }
@@ -102,17 +98,12 @@ class ChatStatusService {
     }
   }
 
-  /// MARK AS READ:
-  /// Transitions status from 'delivered' to 'read' (Blue Ticks).
-  /// Triggered by the ChatScreen when a user views a specific conversation.
   void markMessagesAsRead(String chatId) async {
     try {
-      // 1. Reset unread counter to hide notification badges
       await _firestore.collection('chats').doc(chatId).update({
         'unread_$currentUserId': 0,
       });
 
-      // 2. Query all messages sent by the OTHER person that aren't 'read' yet
       final snapshot = await _firestore
           .collection('chats')
           .doc(chatId)
@@ -126,12 +117,9 @@ class ChatStatusService {
         for (var doc in snapshot.docs) {
           batch.update(doc.reference, {'status': 'read'});
         }
-
-        // 3. Sync main chat document for blue ticks on the Chat List Page
         batch.update(_firestore.collection('chats').doc(chatId), {
           'lastMessageStatus': 'read',
         });
-
         await batch.commit();
       }
     } catch (e) {

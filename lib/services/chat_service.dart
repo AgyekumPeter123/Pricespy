@@ -8,12 +8,19 @@ class ChatService {
   final String chatId;
   final String myUid;
   final String receiverId;
+
+  // Receiver info to update Chat List correctly
+  final String receiverName;
+  final String? receiverPhoto;
+
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   ChatService({
     required this.chatId,
     required this.myUid,
     required this.receiverId,
+    required this.receiverName,
+    this.receiverPhoto,
   });
 
   // --- SEND TEXT ---
@@ -30,7 +37,6 @@ class ChatService {
       isReceiverOnline = receiverDoc.data()?['isOnline'] ?? false;
     }
 
-    // 2. WhatsApp Logic: Offline = sent (1 tick), Online = delivered (2 grey ticks)
     String initialStatus = isReceiverOnline ? 'delivered' : 'sent';
 
     final messageData = {
@@ -60,18 +66,14 @@ class ChatService {
     await _updateLastMessage(text, status: initialStatus);
   }
 
-  /// Marks all messages sent to ME as 'delivered' (2 grey ticks) cross-app
-  /// Call this when the app resumes or at Splash Screen
   Future<void> markAllAsDelivered() async {
     try {
-      // Query all chats where I am a participant
       final chatsSnapshot = await _db
           .collection('chats')
           .where('visibleFor', arrayContains: myUid)
           .get();
 
       for (var chatDoc in chatsSnapshot.docs) {
-        // Find messages sent to ME that are still only 'sent'
         final messagesSnapshot = await chatDoc.reference
             .collection('messages')
             .where('receiverId', isEqualTo: myUid)
@@ -99,7 +101,6 @@ class ChatService {
     String? caption,
     Map<String, dynamic>? replyMessage,
   }) async {
-    // Initial entry with 'sending' status and local path for immediate UI preview
     DocumentReference messageRef = await _db
         .collection('chats')
         .doc(chatId)
@@ -157,7 +158,6 @@ class ChatService {
           .from('chat_files')
           .getPublicUrl(remotePath);
 
-      // Check receiver status again after upload completes to set tick state
       final userDoc = await _db.collection('users').doc(receiverId).get();
       bool isReceiverOnline = userDoc.data()?['isOnline'] ?? false;
       String finalStatus = isReceiverOnline ? 'delivered' : 'sent';
@@ -168,16 +168,13 @@ class ChatService {
         'expiresAt': Timestamp.fromDate(expiryDate),
       });
 
-      // 🟢 FIX: Ensure preview text is never empty/null to prevent "Error Decrypting"
       String preview = caption.isNotEmpty ? caption : _getMediaTypeLabel(type);
-
       await _updateLastMessage(preview, status: finalStatus);
     } catch (e) {
       await messageRef.update({'status': 'error'});
     }
   }
 
-  // 🟢 Helper to get clean labels for media types
   String _getMediaTypeLabel(String type) {
     switch (type) {
       case 'image':
@@ -197,8 +194,6 @@ class ChatService {
   }) async {
     String myName = 'User';
     String? myPhoto;
-
-    // 🟢 FIX: Ensure we never encrypt an empty string
     final String safePreview = preview.isEmpty ? "Message" : preview;
 
     try {
@@ -219,8 +214,8 @@ class ChatService {
       'unread_$receiverId': FieldValue.increment(1),
       'participants': [myUid, receiverId],
       'lastMessageStatus': status,
-      'userNames': {myUid: myName},
-      'userAvatars': {myUid: myPhoto},
+      'userNames': {myUid: myName, receiverId: receiverName},
+      'userAvatars': {myUid: myPhoto, receiverId: receiverPhoto},
       'visibleFor': FieldValue.arrayUnion([myUid, receiverId]),
     }, SetOptions(merge: true));
   }
@@ -263,19 +258,27 @@ class ChatService {
         .collection('messages')
         .get();
 
-    final batch = _db.batch();
-    for (var doc in snapshot.docs) {
-      batch.update(doc.reference, {
-        'deletedFor': FieldValue.arrayUnion([myUid]),
-      });
+    const int batchSize = 500;
+    for (int i = 0; i < snapshot.docs.length; i += batchSize) {
+      final batch = _db.batch();
+      var end = (i + batchSize < snapshot.docs.length)
+          ? i + batchSize
+          : snapshot.docs.length;
+      var chunk = snapshot.docs.sublist(i, end);
+
+      for (var doc in chunk) {
+        batch.update(doc.reference, {
+          'deletedFor': FieldValue.arrayUnion([myUid]),
+        });
+      }
+      await batch.commit();
     }
 
-    batch.update(_db.collection('chats').doc(chatId), {
-      'visibleFor': FieldValue.arrayRemove([myUid]),
+    // 🟢 UPDATED: Set 'clearedAt' timestamp so we know when you cleared it
+    await _db.collection('chats').doc(chatId).update({
       'unread_$myUid': 0,
+      'clearedAt_$myUid': FieldValue.serverTimestamp(),
     });
-
-    await batch.commit();
   }
 
   Future<void> _deleteSupabaseFile(String url) async {

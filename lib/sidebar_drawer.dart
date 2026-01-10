@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,6 +9,7 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:local_auth/local_auth.dart'; // 🟢 v3.0.0
 
 // --- PAGE IMPORTS ---
 import 'login_page.dart';
@@ -23,7 +25,8 @@ import 'location_settings.dart';
 import 'disclaimer_page.dart';
 import 'admin_dashboard.dart';
 import 'churn_prediction_page.dart';
-import 'admin_service.dart'; // 🟢 Added for AdminService
+import 'admin_service.dart';
+import 'services/chat_status_service.dart';
 
 class SidebarDrawer extends StatefulWidget {
   final bool isHome;
@@ -36,14 +39,101 @@ class SidebarDrawer extends StatefulWidget {
 class _SidebarDrawerState extends State<SidebarDrawer> {
   final User? user = FirebaseAuth.instance.currentUser;
   final String _adminEmail = "agyekumpeter123@gmail.com";
+  final LocalAuthentication auth = LocalAuthentication();
 
   @override
   void initState() {
     super.initState();
-    // 🟢 NEW: Run maintenance check when admin opens sidebar
     if (user != null && user!.email == _adminEmail) {
       AdminService.checkAndLiftExpiredRestrictions(user!.uid);
     }
+  }
+
+  // 🟢 NEW: Secure Admin Navigation (Fixed for Swipe-only devices & v3.0.0)
+  Future<void> _handleAdminNavigation(BuildContext context) async {
+    // 1. Hardware/OS Check
+    final bool isDeviceSupported = await auth.isDeviceSupported();
+
+    if (!isDeviceSupported) {
+      _showSecurityDialog(
+        context,
+        "Not Supported",
+        "Your device does not support the security features required to access the Admin Console. Kindly ensure your device has a secure screen lock (PIN, Password, or Biometrics) set up.",
+      );
+      return;
+    }
+
+    try {
+      // 2. Trigger Authentication
+      // This will return FALSE immediately on swipe-only phones (it won't throw)
+      final bool didAuthenticate = await auth.authenticate(
+        localizedReason: 'Please authenticate to access the Admin Console',
+        persistAcrossBackgrounding: true,
+        // options like biometricOnly are removed; allowing PIN is default behavior now
+      );
+
+      // 3. Handle Success
+      if (didAuthenticate) {
+        if (!mounted) return;
+        Navigator.pop(context); // Close drawer
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const AdminDashboard()),
+        );
+      } else {
+        // 4. Handle Silent Failure (Swipe Only / User Cancel)
+        // If the user cancelled, or if the OS returned false because no security exists:
+        _showSecurityDialog(
+          context,
+          "Security Required",
+          "Admin access requires a secure screen lock (PIN, Password, or Biometrics). Swipe-only lock is not supported.",
+        );
+      }
+    } on PlatformException catch (e) {
+      // 5. Handle Specific Platform Errors (Hardware issues)
+      debugPrint("Auth Platform Error: ${e.code} - ${e.message}");
+      if (e.code == 'NotEnrolled' ||
+          e.code == 'PasscodeNotSet' ||
+          e.code == 'NotAvailable' ||
+          e.code == 'otherOperatingSystem') {
+        _showSecurityDialog(
+          context,
+          "Security Setup Required",
+          "Please go to your phone settings and set up a Screen Lock (PIN, Password, or Biometrics) to access the Admin Console.",
+        );
+      } else if (e.code == 'LockedOut' || e.code == 'PermanentlyLockedOut') {
+        _showSecurityDialog(
+          context,
+          "Access Locked",
+          "Too many failed attempts. Please try again later.",
+        );
+      } else {
+        // Catch-all for other platform errors
+        _showSecurityDialog(
+          context,
+          "Authentication Error",
+          "Could not verify identity. Please ensure your device security is set up.",
+        );
+      }
+    } catch (e) {
+      debugPrint("Generic Auth Error: $e");
+    }
+  }
+
+  void _showSecurityDialog(BuildContext context, String title, String content) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("OK"),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _logout(BuildContext context) async {
@@ -68,8 +158,17 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
     );
 
     if (confirmed == true) {
+      if (user != null) {
+        try {
+          await ChatStatusService(currentUserId: user!.uid).goOffline();
+        } catch (e) {
+          debugPrint("Error setting offline status: $e");
+        }
+      }
+
       await GoogleSignIn.instance.signOut();
       await FirebaseAuth.instance.signOut();
+
       if (context.mounted) {
         Navigator.pushAndRemoveUntil(
           context,
@@ -336,26 +435,21 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
               if (snapshot.hasData && snapshot.data!.exists) {
                 final data = snapshot.data!.data() as Map<String, dynamic>;
 
-                // 1. Name Check (34%)
                 if ((data['displayName'] ?? "").toString().isNotEmpty) {
                   profileScore += 34;
-                  displayName =
-                      data['displayName']; // Use Firestore name if available
+                  displayName = data['displayName'];
                 } else if ((user?.displayName ?? "").isNotEmpty) {
                   profileScore += 34;
                 }
 
-                // 2. Call Number Check (33%)
                 if ((data['call_number'] ?? "").toString().isNotEmpty) {
                   profileScore += 33;
                 }
 
-                // 3. WhatsApp Number Check (33%)
                 if ((data['whatsapp_number'] ?? "").toString().isNotEmpty) {
                   profileScore += 33;
                 }
 
-                // Use Firestore photo if newer
                 if (data['photoUrl'] != null) photoURL = data['photoUrl'];
               }
 
@@ -509,7 +603,6 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                   targetPage: const HomePage(),
                   isCurrent: widget.isHome,
                 ),
-                // 3. Location Settings (Restored)
                 _buildDrawerItem(
                   context: context,
                   icon: Icons.settings_input_antenna,
@@ -524,7 +617,7 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                 ),
 
                 _buildSectionHeader("COMMUNICATION"),
-                // Inbox with Badge (Excluding Replies)
+                // Inbox with Badge
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('users')
@@ -548,14 +641,14 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                     );
                   },
                 ),
-                // 2. My Post Comments with Badge (Specific for Replies)
+                // My Post Comments with Badge
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('users')
                       .doc(user?.uid)
                       .collection('notifications')
                       .where('read', isEqualTo: false)
-                      .where('type', isEqualTo: 'reply') // Specific filter
+                      .where('type', isEqualTo: 'reply')
                       .snapshots(),
                   builder: (context, snapshot) {
                     int count = 0;
@@ -603,7 +696,6 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                   title: "My Posts",
                   targetPage: const MyPostsPage(),
                 ),
-                // 1. Saved Posts (Restored)
                 _buildDrawerItem(
                   context: context,
                   icon: Icons.bookmark_outline,
@@ -625,17 +717,18 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
 
                 if (user?.email == _adminEmail) ...[
                   _buildSectionHeader("ADMINISTRATION"),
+                  // 🟢 Custom OnTap for Security Check
                   _buildDrawerItem(
                     context: context,
                     icon: Icons.admin_panel_settings,
                     title: "Admin Console",
                     targetPage: const AdminDashboard(),
                     iconColor: Colors.redAccent,
+                    onTap: () => _handleAdminNavigation(context),
                   ),
                 ],
 
                 const Divider(height: 30),
-                // 4. Disclaimer Page (Restored)
                 _buildDrawerItem(
                   context: context,
                   icon: Icons.shield_outlined,

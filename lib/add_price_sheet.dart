@@ -37,11 +37,9 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
   final _locationController = TextEditingController();
   final _landmarkController = TextEditingController();
   final _shopNameController = TextEditingController();
-
-  // Initialize empty to ensure score starts at 0
   final _unitController = TextEditingController();
 
-  // 🟢 NEW: Condition Logic
+  // Condition Logic
   String _itemCondition = 'New';
   final List<String> _conditionOptions = ['New', 'Used', 'Refurbished'];
 
@@ -132,7 +130,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         final String callNum = data['call_number'] ?? "";
         final String waNum = data['whatsapp_number'] ?? "";
 
-        // Setting text triggers the listeners, updating the score immediately
         if (callNum.isNotEmpty) _phoneController.text = callNum;
         if (waNum.isNotEmpty) _whatsappController.text = waNum;
 
@@ -212,49 +209,59 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     super.dispose();
   }
 
+  // UPDATED: High accuracy location detection with better error handling
   Future<void> _detectLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return;
+    if (!serviceEnabled) {
+      if (mounted) setState(() => _locationController.text = "GPS Disabled");
+      return;
+    }
+
     LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied)
+    if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-    if (permission == LocationPermission.denied) return;
+      if (permission == LocationPermission.denied) return;
+    }
+
+    if (permission == LocationPermission.deniedForever) return;
 
     if (mounted) setState(() => _locationController.text = "Detecting...");
 
     try {
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
       );
 
-      if (!mounted) return; // 🔴 Crash Fix
+      if (!mounted) return;
 
-      if (mounted) setState(() => _currentPosition = position);
+      setState(() => _currentPosition = position);
 
       List<Placemark> placemarks = await placemarkFromCoordinates(
         position.latitude,
         position.longitude,
       );
 
-      if (!mounted) return; // 🔴 Crash Fix
+      if (!mounted) return;
 
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks[0];
         String address = "${place.street}, ${place.locality}";
-        if (place.street == null || place.street!.isEmpty)
+        if (place.street == null || place.street!.isEmpty) {
           address = "${place.subLocality}, ${place.locality}";
+        }
         String landmark = place.name ?? "";
         if (landmark == place.street) landmark = "";
 
-        if (mounted) {
-          setState(() {
-            _locationController.text = address;
-            _landmarkController.text = landmark;
-          });
-        }
+        setState(() {
+          _locationController.text = address;
+          _landmarkController.text = landmark;
+        });
       }
     } catch (e) {
-      if (mounted) setState(() => _locationController.text = "");
+      if (mounted)
+        setState(() => _locationController.text = "Search manually...");
+      debugPrint("Location Error: $e");
     }
   }
 
@@ -264,10 +271,13 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       if (status != PermissionStatus.granted) return;
       bool available = await _speech.initialize(
         onStatus: (val) {
-          if (val == 'done' || val == 'notListening')
-            setState(() => _isListening = false);
+          if (val == 'done' || val == 'notListening') {
+            if (mounted) setState(() => _isListening = false);
+          }
         },
-        onError: (val) => setState(() => _isListening = false),
+        onError: (val) {
+          if (mounted) setState(() => _isListening = false);
+        },
       );
       if (available) {
         setState(() => _isListening = true);
@@ -285,7 +295,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     }
   }
 
-  // --- PRODUCT IMAGE LOGIC ---
   Future<void> _pickProductImage() async {
     final file = await _imageHelper.pickImage();
     if (file == null) return;
@@ -325,7 +334,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       final textRecognizer = TextRecognizer();
       final recognizedText = await textRecognizer.processImage(inputImage);
 
-      if (!mounted) return; // 🔴 Crash Fix
+      if (!mounted) return;
 
       List<String> newSuggestions = [];
       String? foundPrice;
@@ -357,14 +366,13 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       for (TextBlock block in recognizedText.blocks) {
         String text = block.text.trim().toLowerCase();
 
-        // Check Price
         if (priceWithCurrencyRegex.hasMatch(text)) {
           var match = priceWithCurrencyRegex.firstMatch(text);
-          if (match != null)
+          if (match != null) {
             foundPrice = match.group(0)!.replaceAll(RegExp(r'[^0-9.]'), '');
+          }
         }
 
-        // Check Unit
         if (unitRegex.hasMatch(text)) {
           var match = unitRegex.firstMatch(text);
           if (match != null) {
@@ -382,7 +390,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         setState(() {
           _aiSuggestions = newSuggestions.take(8).toList();
           if (foundPrice != null) _priceController.text = foundPrice;
-          // Auto-fill unit
           if (foundUnit != null) {
             foundUnit = foundUnit!.replaceAll(' ', '').toLowerCase();
             if (foundUnit!.contains('l'))
@@ -418,7 +425,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       ],
     );
     if (cropped != null) {
-      // Set State triggers UI update, which calls _calculateQualityScore
       setState(() => _shopFrontImage = File(cropped.path));
       await _analyzeShopImage(File(cropped.path));
     }
@@ -432,7 +438,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       final textRecognizer = TextRecognizer();
       final recognizedText = await textRecognizer.processImage(inputImage);
 
-      if (!mounted) return; // 🔴 Crash Fix
+      if (!mounted) return;
 
       TextBlock? largestBlock;
       double maxArea = 0;
@@ -491,13 +497,13 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
       String imageUrl = _existingImageUrl ?? "";
       if (_productImage != null) {
         imageUrl = await _imageHelper.uploadImage(_productImage!) ?? "";
-        if (!mounted) return; // 🔴 Crash Fix
+        if (!mounted) return;
       }
 
-      String shopImageUrl = "";
+      String shopImageUrl = widget.existingData?['shop_front_image_url'] ?? "";
       if (_shopFrontImage != null) {
         shopImageUrl = await _imageHelper.uploadImage(_shopFrontImage!) ?? "";
-        if (!mounted) return; // 🔴 Crash Fix
+        if (!mounted) return;
       }
 
       String whatsappNum = _whatsappController.text.trim();
@@ -556,78 +562,45 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         Navigator.pop(context);
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // 🟢 DYNAMIC SCORING based on Shop vs Individual
   double _calculateQualityScore() {
     double score = 0;
-
-    // --- SHARED FIELDS (Max 65%) ---
-    // Image: 15%
     if (_productImage != null ||
         (_existingImageUrl != null && _existingImageUrl!.isNotEmpty))
       score += 15;
-
-    // Name: 10%
     if (_nameController.text.isNotEmpty) score += 10;
-
-    // Price: 10%
     if (_priceController.text.isNotEmpty) score += 10;
-
-    // Unit: 5%
     if (_unitController.text.isNotEmpty) score += 5;
-
-    // Location: 15% (Ignore 'Detecting...')
     if (_locationController.text.isNotEmpty &&
         _locationController.text != "Detecting...")
       score += 15;
-
-    // Phone: 10%
     if (_phoneController.text.isNotEmpty) score += 10;
 
-    // --- SPECIFIC FIELDS (Max 35%) ---
     if (_posterType == 'Shop Owner') {
-      // 1. Shop Image: 15%
-      bool hasShopImage = _shopFrontImage != null;
-      // If editing and we don't have a local file, check if we have a url (complex to track, assume new upload needed for 100% on new posts)
-      // For simplicity in this logic:
-      if (hasShopImage)
+      if (_shopFrontImage != null ||
+          (widget.existingData?['shop_front_image_url'] != null &&
+              widget.existingData!['shop_front_image_url'] != ""))
         score += 15;
-      else if (widget.existingData?['shop_front_image_url'] != null &&
-          widget.existingData!['shop_front_image_url'] != "")
-        score += 15;
-
-      // 2. Shop Name: 10%
       if (_shopNameController.text.isNotEmpty) score += 10;
-
-      // 3. WhatsApp: 5%
       if (_whatsappController.text.isNotEmpty) score += 5;
-
-      // 4. Landmark & Desc: 5% total
       if (_landmarkController.text.isNotEmpty ||
           _descriptionController.text.isNotEmpty)
         score += 5;
     } else {
-      // INDIVIDUAL
-      // 1. Landmark: 15%
       if (_landmarkController.text.isNotEmpty) score += 15;
-
-      // 2. Description: 10%
       if (_descriptionController.text.length > 5) score += 10;
-
-      // 3. WhatsApp: 10% (Higher importance for individuals)
       if (_whatsappController.text.isNotEmpty) score += 10;
     }
-
-    if (score > 100) score = 100;
-    return score;
+    return score > 100 ? 100 : score;
   }
 
   @override
@@ -651,7 +624,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
               ),
             ),
           ),
-
           Flexible(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -716,9 +688,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
             _posterType = type;
             _currentStep = 1;
           });
-          if (type == 'Individual') {
-            await _checkUserProfile();
-          }
+          if (type == 'Individual') await _checkUserProfile();
         },
         child: Container(
           height: 150,
@@ -764,7 +734,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 📊 LISTING QUALITY CHART
         Container(
           margin: const EdgeInsets.only(bottom: 20),
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
@@ -825,8 +794,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
             ],
           ),
         ),
-
-        // 📸 IMAGE UPLOAD
         GestureDetector(
           onTap: _pickProductImage,
           child: Container(
@@ -871,7 +838,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
                       : null),
           ),
         ),
-
         if (_aiSuggestions.isNotEmpty) ...[
           const SizedBox(height: 12),
           SizedBox(
@@ -879,25 +845,21 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: _aiSuggestions.length,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ActionChip(
-                    label: Text(_aiSuggestions[index]),
-                    backgroundColor: Colors.blue[50],
-                    labelStyle: TextStyle(color: Colors.blue[800]),
-                    onPressed: () => setState(
-                      () => _nameController.text = _aiSuggestions[index],
-                    ),
+              itemBuilder: (context, index) => Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ActionChip(
+                  label: Text(_aiSuggestions[index]),
+                  backgroundColor: Colors.blue[50],
+                  labelStyle: TextStyle(color: Colors.blue[800]),
+                  onPressed: () => setState(
+                    () => _nameController.text = _aiSuggestions[index],
                   ),
-                );
-              },
+                ),
+              ),
             ),
           ),
         ],
-
         const SizedBox(height: 20),
-
         _buildGlassInput(
           "Product Name",
           _nameController,
@@ -916,7 +878,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
             ),
           ),
         ),
-
         const SizedBox(height: 12),
         Row(
           children: [
@@ -933,20 +894,16 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
             Expanded(flex: 5, child: _buildUnitInput()),
           ],
         ),
-
-        // 🟢 NEW: CONDITION DROPDOWN (For Individuals)
         if (_posterType == 'Individual') ...[
           const SizedBox(height: 12),
           _buildConditionInput(),
         ],
-
         if (_posterType == 'Shop Owner') ...[
           const SizedBox(height: 20),
           GestureDetector(
             onTap: _pickShopImage,
             child: Container(
               height: 100,
-              width: double.infinity,
               decoration: BoxDecoration(
                 color: Colors.blue[50],
                 borderRadius: BorderRadius.circular(16),
@@ -962,22 +919,22 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
                   ? Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        if (_isAnalyzingShop)
-                          const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        else ...[
-                          Icon(Icons.storefront, color: Colors.blue[800]),
-                          Text(
-                            "Add Shop Front Photo",
-                            style: TextStyle(
-                              color: Colors.blue[800],
-                              fontWeight: FontWeight.bold,
-                            ),
+                        _isAnalyzingShop
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(Icons.storefront, color: Colors.blue[800]),
+                        Text(
+                          "Add Shop Front Photo",
+                          style: TextStyle(
+                            color: Colors.blue[800],
+                            fontWeight: FontWeight.bold,
                           ),
-                        ],
+                        ),
                       ],
                     )
                   : null,
@@ -986,14 +943,12 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
           const SizedBox(height: 12),
           _buildGlassInput("Shop Name", _shopNameController, icon: Icons.store),
         ],
-
         const SizedBox(height: 20),
         const Text(
           "Location & Contact",
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         const SizedBox(height: 10),
-
         _buildGlassInput(
           "Location / Street",
           _locationController,
@@ -1022,9 +977,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
           isNumber: true,
           icon: Icons.message_outlined,
         ),
-
         const SizedBox(height: 30),
-
         SizedBox(
           height: 55,
           child: ElevatedButton(
@@ -1036,7 +989,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
                 borderRadius: BorderRadius.circular(16),
               ),
               elevation: 5,
-              shadowColor: Colors.green.withOpacity(0.4),
             ),
             child: _isLoading
                 ? const CircularProgressIndicator(color: Colors.white)
@@ -1064,13 +1016,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.shade300),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: TextField(
         controller: controller,
@@ -1082,8 +1027,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
           prefixIcon: icon != null ? Icon(icon, color: Colors.grey[400]) : null,
           suffixIcon: suffix,
           border: InputBorder.none,
-          filled: true,
-          fillColor: Colors.transparent,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 20,
             vertical: 16,
@@ -1099,47 +1042,32 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.shade300),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: TextField(
         controller: _unitController,
         decoration: InputDecoration(
           labelText: "Unit / Size",
           border: InputBorder.none,
-          filled: true,
-          fillColor: Colors.transparent,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 20,
             vertical: 16,
           ),
           suffixIcon: PopupMenuButton<String>(
             icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
-            onSelected: (String value) {
-              setState(() {
-                _unitController.text = value;
-              });
-            },
-            itemBuilder: (BuildContext context) {
-              return _marketUnits.map((String choice) {
-                return PopupMenuItem<String>(
-                  value: choice,
-                  child: Text(choice),
-                );
-              }).toList();
-            },
+            onSelected: (String value) =>
+                setState(() => _unitController.text = value),
+            itemBuilder: (BuildContext context) => _marketUnits
+                .map(
+                  (String choice) =>
+                      PopupMenuItem<String>(value: choice, child: Text(choice)),
+                )
+                .toList(),
           ),
         ),
       ),
     );
   }
 
-  // 🟢 NEW: Widget for Product Condition (Refurbished/Used/New)
   Widget _buildConditionInput() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -1147,13 +1075,6 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.shade300),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: InputDecorator(
         decoration: const InputDecoration(
@@ -1165,28 +1086,20 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
           child: DropdownButton<String>(
             value: _itemCondition,
             isExpanded: true,
-            icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
             onChanged: (String? newValue) {
-              if (newValue != null) {
-                setState(() => _itemCondition = newValue);
-              }
+              if (newValue != null) setState(() => _itemCondition = newValue);
             },
             items: _conditionOptions.map<DropdownMenuItem<String>>((
               String value,
             ) {
-              Color color;
-              IconData icon;
-              if (value == 'New') {
-                color = Colors.green;
-                icon = Icons.check_circle_outline;
-              } else if (value == 'Refurbished') {
-                color = Colors.orange;
-                icon = Icons.build_circle_outlined;
-              } else {
-                color = Colors.blueGrey;
-                icon = Icons.history;
-              }
-
+              Color color = value == 'New'
+                  ? Colors.green
+                  : (value == 'Refurbished' ? Colors.orange : Colors.blueGrey);
+              IconData icon = value == 'New'
+                  ? Icons.check_circle_outline
+                  : (value == 'Refurbished'
+                        ? Icons.build_circle_outlined
+                        : Icons.history);
               return DropdownMenuItem<String>(
                 value: value,
                 child: Row(

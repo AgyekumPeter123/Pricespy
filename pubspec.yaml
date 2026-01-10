@@ -78,6 +78,7 @@ dependencies:
   share_plus: ^12.0.1
   flutter_markdown: ^0.7.1
   flutter_dotenv: ^5.1.0
+  local_auth: ^3.0.0
 
 dev_dependencies:
   flutter_test:
@@ -113,7 +114,7 @@ flutter:
     - assets/files/best_threshold.json
     - assets/files/feature_order.json
     - assets/files/scaler.json
-    - assets/files/telco_churn_model.tflite
+    - assets/files/ghana_churn_model.tflite
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

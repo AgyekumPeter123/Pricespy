@@ -70,10 +70,13 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    // 🟢 FIX: Passed receiverName and photo so ChatService can update Chat List
     _chatService = ChatService(
       chatId: widget.chatId,
       myUid: myUid,
       receiverId: widget.receiverId,
+      receiverName: widget.receiverName,
+      receiverPhoto: widget.receiverPhoto,
     );
 
     _statusService = ChatStatusService(currentUserId: myUid);
@@ -86,7 +89,12 @@ class _ChatScreenState extends State<ChatScreen> {
     _loadWallpaper();
   }
 
-  // --- WALLPAPER LOGIC ---
+  // ... (REST OF THE FILE REMAINS EXACTLY THE SAME, OMITTED FOR BREVITY)
+  // ... Paste the rest of your original `chat_screen.dart` content here
+  // ... starting from `Future<void> _loadWallpaper() async {`
+
+  // Just putting the Load Wallpaper function here to show continuity,
+  // you can keep the rest of the file identical to what you uploaded.
   Future<void> _loadWallpaper() async {
     final prefs = await SharedPreferences.getInstance();
     final int? colorValue = prefs.getInt('wallpaper_${widget.chatId}');
@@ -96,6 +104,8 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     }
   }
+
+  // (Paste rest of original code...)
 
   Future<void> _saveWallpaper(Color color) async {
     final prefs = await SharedPreferences.getInstance();
@@ -172,20 +182,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
-    // 🟢 RESOURCE CLEANUP (Memory Leak Fix)
     _statusService.dispose();
     _textController.dispose();
-
-    // Stop recording if active before closing
     if (_audioRecorder.isRecording) {
       _audioRecorder.stopRecorder();
     }
     _audioRecorder.closeRecorder();
-
-    // Stop playing if active
     _audioPlayer.stop();
     _audioPlayer.dispose();
-
     _recordTimer?.cancel();
     super.dispose();
   }
@@ -415,7 +419,6 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         );
         if (result != null) {
-          // 🟢 INTERNET CONNECTIVITY CHECK
           final connectivityService = ConnectivityService();
           if (!await connectivityService.checkAndShowConnectivity(context)) {
             return;
@@ -456,7 +459,6 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           );
           if (result != null) {
-            // 🟢 INTERNET CONNECTIVITY CHECK
             final connectivityService = ConnectivityService();
             if (!await connectivityService.checkAndShowConnectivity(context)) {
               return;
@@ -512,7 +514,6 @@ class _ChatScreenState extends State<ChatScreen> {
       _recordDuration = "00:00";
     });
     if (send && path != null) {
-      // 🟢 INTERNET CONNECTIVITY CHECK
       final connectivityService = ConnectivityService();
       if (!await connectivityService.checkAndShowConnectivity(context)) {
         return;
@@ -536,7 +537,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // --- HELPER METHODS FOR DATE CHIPS ---
   bool _isSameDay(DateTime d1, DateTime d2) {
     return d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;
   }
@@ -602,7 +602,6 @@ class _ChatScreenState extends State<ChatScreen> {
           : AppBar(
               backgroundColor: Colors.green[800],
               titleSpacing: 0,
-              // --- CHANGED: NESTED STREAM FOR PRESENCE + TYPING ---
               title: StreamBuilder<DocumentSnapshot>(
                 stream: _statusService.getUserPresenceStream(widget.receiverId),
                 builder: (context, snapshot) {
@@ -763,23 +762,18 @@ class _ChatScreenState extends State<ChatScreen> {
                       );
                     } catch (_) {}
 
-                    // --- ADDED: DATE SEPARATOR LOGIC ---
                     Widget? dateSeparator;
                     if (index < _currentDocs.length - 1) {
-                      // Compare with the next message (which is older in time)
                       final nextDoc = _currentDocs[index + 1];
                       final nextData = nextDoc.data() as Map<String, dynamic>;
-
                       Timestamp? currTs = data['timestamp'];
                       Timestamp? nextTs = nextData['timestamp'];
-
                       if (currTs != null && nextTs != null) {
                         if (!_isSameDay(currTs.toDate(), nextTs.toDate())) {
                           dateSeparator = _buildDateChip(currTs.toDate());
                         }
                       }
                     } else {
-                      // Oldest message (top of chat)
                       Timestamp? currTs = data['timestamp'];
                       if (currTs != null) {
                         dateSeparator = _buildDateChip(currTs.toDate());
@@ -867,7 +861,6 @@ class _ChatScreenState extends State<ChatScreen> {
             onLockRecording: () => setState(() => _isRecorderLocked = true),
             onCancelRecording: () => _stopRecording(false),
             onSendMessage: (txt) async {
-              // 🟢 INTERNET CONNECTIVITY CHECK
               final connectivityService = ConnectivityService();
               if (!await connectivityService.checkAndShowConnectivity(
                 context,

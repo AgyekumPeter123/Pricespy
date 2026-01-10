@@ -177,32 +177,29 @@ class _PriceTrendChartState extends State<PriceTrendChart> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 🟢 1. Header Row
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(Icons.trending_up, color: Colors.green[800]),
-                  const SizedBox(width: 8),
-                  const Text(
-                    "Price Trend (Nearby)",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-              // Hint for user
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  "Tap dot to view",
-                  style: TextStyle(fontSize: 10, color: Colors.green),
-                ),
+              Icon(Icons.trending_up, color: Colors.green[800]),
+              const SizedBox(width: 8),
+              const Text(
+                "Price Trend (Nearby)",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ],
+          ),
+          const SizedBox(height: 6),
+          // 🟢 2. Hint moved beneath title
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text(
+              "Tap dot to view",
+              style: TextStyle(fontSize: 10, color: Colors.green),
+            ),
           ),
           const SizedBox(height: 20),
           SizedBox(

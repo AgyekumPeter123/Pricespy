@@ -879,9 +879,8 @@ class IntelCard extends StatelessWidget {
 
   void _openMap(BuildContext context, double lat, double lng) => _launchURL(
     context,
-    "http://googleusercontent.com/maps.google.com/?q=$lat,$lng",
+    "https://www.google.com/maps/search/?api=1&query=$lat,$lng",
   );
-
   void _openWhatsApp(BuildContext context, String phone) {
     String clean = phone.replaceAll(RegExp(r'\s+'), '');
     if (clean.startsWith('0')) clean = '+233${clean.substring(1)}';

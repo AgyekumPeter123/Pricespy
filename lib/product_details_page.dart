@@ -10,6 +10,7 @@ import 'comment_sheet.dart';
 import 'price_trend_chart.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'services/post_service.dart';
+import 'screens/chat/chat_screen.dart'; // 🟢 Added for Chat
 
 class ProductDetailsPage extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -30,12 +31,10 @@ class ProductDetailsPage extends StatefulWidget {
 }
 
 class _ProductDetailsPageState extends State<ProductDetailsPage> {
-  // Fix 1: Store uploaderId locally so we can update it if missing
   late String _uploaderId;
-  String? _uploaderEmail; // Fix 2: To store fetched email for admin
+  String? _uploaderEmail;
   bool _isAdmin = false;
-  final String _adminEmail =
-      "agyekumpeter123@gmail.com"; // Hardcoded Admin Check
+  final String _adminEmail = "agyekumpeter123@gmail.com";
 
   @override
   void initState() {
@@ -43,7 +42,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     _uploaderId = widget.data['uploader_id'] ?? '';
     _checkAdminAndFetchDetails();
 
-    // Fix 1: If uploader_id is missing (common in Saved Posts), fetch it.
     if (_uploaderId.isEmpty) {
       _fetchMissingDetails();
     }
@@ -61,7 +59,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       setState(() {
         _isAdmin = true;
       });
-      // Fetch uploader email for Admin view
       if (_uploaderId.isNotEmpty) {
         FirebaseFirestore.instance
             .collection('users')
@@ -88,7 +85,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
         final freshData = doc.data() as Map<String, dynamic>;
         setState(() {
           _uploaderId = freshData['uploader_id'] ?? '';
-          // If admin, fetch email now that we have ID
           if (_isAdmin && _uploaderId.isNotEmpty) {
             FirebaseFirestore.instance
                 .collection('users')
@@ -107,7 +103,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   }
 
   void _openComments() {
-    // Fix 1: Use the potentially updated _uploaderId
     if (_uploaderId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Loading post details... try again.")),
@@ -124,7 +119,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     );
   }
 
-  // --- REPORT LOGIC ---
   Future<void> _reportProduct() async {
     final User? user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -153,15 +147,14 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             child: Text(r),
             onPressed: () async {
-              Navigator.pop(context); // Close dialog
+              Navigator.pop(context);
 
               await FirebaseFirestore.instance.collection('reports').add({
                 'postId': widget.documentId,
                 'productName': widget.data['product_name'] ?? 'Unknown',
                 'reporterId': user.uid,
                 'reporterName': user.displayName ?? 'Anonymous',
-                'uploaderId': _uploaderId, // Use local var
-                // Fix 2: Save uploader email in report if possible
+                'uploaderId': _uploaderId,
                 'uploaderEmail': _uploaderEmail,
                 'reason': r,
                 'timestamp': FieldValue.serverTimestamp(),
@@ -205,11 +198,10 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     );
 
     if (confirm == true) {
-      // 🟢 COMPREHENSIVE POST DELETION: removes post, comments, and saved references
       await PostService().deletePostCompletely(widget.documentId);
 
       if (mounted) {
-        Navigator.pop(context); // Close details page
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Post and all data deleted successfully"),
@@ -238,6 +230,67 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Could not launch action")),
         );
+      }
+    }
+  }
+
+  // 🟢 NEW: Start Private Chat Logic
+  Future<void> _startPrivateChat() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please login to chat.")));
+      return;
+    }
+
+    if (_uploaderId.isEmpty || _uploaderId == currentUser.uid) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uploaderId)
+          .get();
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading
+
+      String displayName = "User";
+      String? photoUrl;
+
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>;
+        displayName = userData['displayName'] ?? userData['username'] ?? "User";
+        photoUrl = userData['photoUrl'] ?? userData['photoURL'];
+      }
+
+      final List<String> ids = [currentUser.uid, _uploaderId];
+      ids.sort();
+      final String chatId = ids.join("_");
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ChatScreen(
+            chatId: chatId,
+            receiverId: _uploaderId,
+            receiverName: displayName,
+            receiverPhoto: photoUrl,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Error starting chat.")));
       }
     }
   }
@@ -284,14 +337,12 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   @override
   Widget build(BuildContext context) {
     final User? currentUser = FirebaseAuth.instance.currentUser;
-    // Fix 1: Use local _uploaderId
     final bool isOwner = currentUser?.uid == _uploaderId;
 
     String locationName = widget.data['location_name'] ?? 'Unknown Location';
     String landmark = widget.data['landmark'] ?? '';
 
     String shopName = widget.data['shop_name'] ?? '';
-    // 🟢 Retrieve Condition from data
     String condition = widget.data['item_condition'] ?? 'New';
     String shopFrontUrl = widget.data['shop_front_image_url'] ?? '';
     bool isShop = widget.data['poster_type'] == 'Shop Owner';
@@ -309,7 +360,19 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
-          if (isOwner) ...[
+          // 🟢 2. ADDED CHAT PRIVATELY BUTTON
+          if (!isOwner) ...[
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline, color: Colors.blue),
+              tooltip: "Chat Privately",
+              onPressed: _startPrivateChat,
+            ),
+            IconButton(
+              icon: const Icon(Icons.flag_outlined, color: Colors.grey),
+              tooltip: "Report Item",
+              onPressed: _reportProduct,
+            ),
+          ] else ...[
             IconButton(
               icon: const Icon(Icons.edit, color: Colors.blue),
               onPressed: _editProduct,
@@ -317,12 +380,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             IconButton(
               icon: const Icon(Icons.delete, color: Colors.red),
               onPressed: _deleteProduct,
-            ),
-          ] else ...[
-            IconButton(
-              icon: const Icon(Icons.flag_outlined, color: Colors.grey),
-              tooltip: "Report Item",
-              onPressed: _reportProduct,
             ),
           ],
         ],
@@ -399,11 +456,12 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                   const SizedBox(height: 5),
 
                   // Tags Row
+                  // 🟢 1. FIXED OVERFLOW: Wrapped in Flexible/Container properly
                   Wrap(
                     spacing: 8,
+                    runSpacing: 8, // Added runSpacing for better wrapping
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      // 🟢 FIXED: Use Container instead of Chip to prevent clipping of "Individual"
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -425,12 +483,11 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                                 ? Colors.blue[900]
                                 : Colors.green[900],
                             fontWeight: FontWeight.w600,
-                            height: 1.1, // Prevents vertical clipping
+                            fontSize: 12,
                           ),
                         ),
                       ),
 
-                      // 🟢 NEW: Product Condition Badge (Only for individuals usually)
                       if (!isShop) _buildConditionBadge(condition),
 
                       Padding(
@@ -446,7 +503,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                     ],
                   ),
 
-                  // Fix 2: Admin Insight Panel
+                  // Admin Insight Panel
                   if (_isAdmin && _uploaderEmail != null)
                     Container(
                       margin: const EdgeInsets.symmetric(vertical: 10),

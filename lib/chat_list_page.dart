@@ -10,7 +10,6 @@ import 'sidebar_drawer.dart';
 class ChatListPage extends StatelessWidget {
   const ChatListPage({super.key});
 
-  // --- HELPER: Build Status Icon (WhatsApp Tiered Ticks) ---
   Widget _buildStatusIcon(String status) {
     switch (status) {
       case 'sending':
@@ -25,8 +24,6 @@ class ChatListPage extends StatelessWidget {
         return const SizedBox(width: 0);
     }
   }
-
-  // --- ACTIONS (PINNING & DELETION) ---
 
   Future<void> _togglePin(
     BuildContext context,
@@ -61,7 +58,6 @@ class ChatListPage extends StatelessWidget {
 
   Future<void> _deleteChat(BuildContext context, String chatId) async {
     try {
-      // Note: This deletes the entire chat document.
       await FirebaseFirestore.instance.collection('chats').doc(chatId).delete();
     } catch (e) {
       if (context.mounted) {
@@ -174,14 +170,12 @@ class ChatListPage extends StatelessWidget {
               );
               if (otherUid.isEmpty) return const SizedBox.shrink();
 
-              // --- PERFORMANCE FIX: READ MAPS INSTEAD OF NEW STREAM ---
               final Map<String, dynamic> names = data['userNames'] ?? {};
               final Map<String, dynamic> avatars = data['userAvatars'] ?? {};
 
               final String otherName = names[otherUid] ?? "User";
               final String? otherPhoto = avatars[otherUid];
 
-              // Logic for Pinning and Status
               final bool isPinned = (data['pinnedBy'] as List? ?? []).contains(
                 myUid,
               );
@@ -189,6 +183,7 @@ class ChatListPage extends StatelessWidget {
               final bool isMe = data['lastSenderId'] == myUid;
               final String lastStatus = data['lastMessageStatus'] ?? 'sent';
 
+              // --- 🟢 NEW LOGIC FOR CLEARED CHATS ---
               String lastMsg = "Message";
               try {
                 lastMsg = EncryptionService.decryptMessage(
@@ -197,6 +192,19 @@ class ChatListPage extends StatelessWidget {
                 );
               } catch (e) {
                 lastMsg = "Encrypted message";
+              }
+
+              final Timestamp? lastMsgTime = data['lastMessageTime'];
+              final Timestamp? clearedAt = data['clearedAt_$myUid'];
+
+              // If clearedAt exists and is NEWER than the last message,
+              // it means the history was cleared and no new messages have arrived.
+              bool isCleared = false;
+              if (clearedAt != null && lastMsgTime != null) {
+                if (clearedAt.compareTo(lastMsgTime) > 0) {
+                  isCleared = true;
+                  lastMsg = "Chat cleared"; // Set display text
+                }
               }
 
               return ListTile(
@@ -230,7 +238,7 @@ class ChatListPage extends StatelessWidget {
                 ),
                 subtitle: Row(
                   children: [
-                    if (isMe) ...[
+                    if (isMe && !isCleared) ...[
                       _buildStatusIcon(lastStatus),
                       const SizedBox(width: 4),
                     ],
@@ -240,12 +248,17 @@ class ChatListPage extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: unreadCount > 0
-                              ? Colors.black87
-                              : Colors.grey[600],
+                          color: isCleared
+                              ? Colors.grey.shade400
+                              : (unreadCount > 0
+                                    ? Colors.black87
+                                    : Colors.grey[600]),
                           fontWeight: unreadCount > 0
                               ? FontWeight.bold
                               : FontWeight.normal,
+                          fontStyle: isCleared
+                              ? FontStyle.italic
+                              : FontStyle.normal,
                         ),
                       ),
                     ),
