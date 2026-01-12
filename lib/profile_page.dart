@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'constants/palette.dart';
 
 import 'sidebar_drawer.dart';
 import 'login_page.dart'; // 🟢 Ensure this is imported for redirection
@@ -74,7 +75,7 @@ class _ProfilePageState extends State<ProfilePage> {
         uiSettings: [
           AndroidUiSettings(
             toolbarTitle: 'Adjust Profile Picture',
-            toolbarColor: Colors.green[800],
+            toolbarColor: Palette.secondary,
             toolbarWidgetColor: Colors.white,
             initAspectRatio: CropAspectRatioPreset.square,
             lockAspectRatio: true,
@@ -118,7 +119,7 @@ class _ProfilePageState extends State<ProfilePage> {
           SnackBar(
             content: const Text("Image updated! Don't forget to Save."),
             behavior: SnackBarBehavior.floating,
-            backgroundColor: Colors.green[800],
+            backgroundColor: Palette.secondary,
           ),
         );
       }
@@ -127,7 +128,7 @@ class _ProfilePageState extends State<ProfilePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Upload failed: $e"),
-            backgroundColor: Colors.red,
+            backgroundColor: Palette.error,
           ),
         );
       }
@@ -168,7 +169,7 @@ class _ProfilePageState extends State<ProfilePage> {
           SnackBar(
             content: const Text("✅ Profile updated successfully!"),
             behavior: SnackBarBehavior.floating,
-            backgroundColor: Colors.green[800],
+            backgroundColor: Palette.secondary,
           ),
         );
       }
@@ -177,7 +178,7 @@ class _ProfilePageState extends State<ProfilePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Failed to update: $e"),
-            backgroundColor: Colors.red,
+            backgroundColor: Palette.error,
           ),
         );
       }
@@ -196,7 +197,7 @@ class _ProfilePageState extends State<ProfilePage> {
       builder: (context) => AlertDialog(
         title: const Text(
           "Delete Account?",
-          style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+          style: TextStyle(color: Palette.error, fontWeight: FontWeight.bold),
         ),
         content: const Text(
           "This action is permanent. Your profile and user data will be deleted forever. You cannot undo this.",
@@ -208,7 +209,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: Palette.error,
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.pop(context, true),
@@ -249,13 +250,13 @@ class _ProfilePageState extends State<ProfilePage> {
               "Security: Please log out and log in again to delete your account.";
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: Colors.red),
+          SnackBar(content: Text(msg), backgroundColor: Palette.error),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+          SnackBar(content: Text("Error: $e"), backgroundColor: Palette.error),
         );
       }
     } finally {
@@ -339,7 +340,7 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
+        foregroundColor: Palette.primary,
         elevation: 0,
         leading: Builder(
           builder: (context) => IconButton(
@@ -395,7 +396,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.green[700],
+                          color: Palette.primary,
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 3),
                           boxShadow: [
@@ -450,10 +451,10 @@ class _ProfilePageState extends State<ProfilePage> {
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _updateProfile,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green[800],
+                  backgroundColor: Palette.primary,
                   foregroundColor: Colors.white,
                   elevation: 5,
-                  shadowColor: Colors.green.withOpacity(0.4),
+                  shadowColor: Palette.primary.withOpacity(0.4),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),

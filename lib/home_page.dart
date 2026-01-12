@@ -16,6 +16,7 @@ import 'product_details_page.dart';
 import 'sidebar_drawer.dart';
 import 'comment_sheet.dart';
 import 'screens/chat/chat_screen.dart';
+import 'constants/palette.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -27,6 +28,9 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final User? user = FirebaseAuth.instance.currentUser;
 
+  // 🟢 1. STREAM STATE VARIABLE (Acts as the cache)
+  Stream<QuerySnapshot>? _postsStream;
+
   static Position? _cachedPosition;
   static bool _hasLoadedOnce = false;
 
@@ -34,13 +38,16 @@ class _HomePageState extends State<HomePage> {
   double _searchRadiusKm = 20.0;
   bool _isLocationReady = false;
 
-  String _selectedFilter = "Nearest Me";
+  // 🟢 2. DEFAULT FILTER IS NOW "All"
+  String _selectedFilter = "All";
   final List<String> _filters = [
+    "All",
     "Nearest Me",
     "Cheapest",
     "Shops Only",
     "Individuals Only",
   ];
+
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
 
@@ -48,7 +55,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadSettings();
-    _initLocationLogic();
+    _initLocationAndStream(); // Initialize logic
 
     _searchController.addListener(() {
       if (mounted) {
@@ -65,6 +72,21 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  // 🟢 3. INITIALIZE STREAM (Fetches once and keeps connection open)
+  void _setupStream() {
+    final DateTime sevenDaysAgo = DateTime.now().subtract(
+      const Duration(days: 7),
+    );
+
+    // We fetch a broad set of data once, then filter locally for speed
+    _postsStream = FirebaseFirestore.instance
+        .collection('posts')
+        .where('timestamp', isGreaterThan: Timestamp.fromDate(sevenDaysAgo))
+        .orderBy('timestamp', descending: true)
+        .limit(150)
+        .snapshots();
+  }
+
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
@@ -74,12 +96,14 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _initLocationLogic() async {
+  Future<void> _initLocationAndStream() async {
+    // If we have a cached position, use it immediately to show data
     if (_hasLoadedOnce && _cachedPosition != null) {
       if (mounted) {
         setState(() {
           _myPosition = _cachedPosition;
           _isLocationReady = true;
+          _setupStream(); // Start the stream
         });
       }
       return;
@@ -92,6 +116,7 @@ class _HomePageState extends State<HomePage> {
 
     bool isCacheValid = false;
 
+    // Check local storage for recent location
     if (savedLat != null && savedLng != null && savedTime != null) {
       final lastSaved = DateTime.fromMillisecondsSinceEpoch(savedTime);
       final diff = DateTime.now().difference(lastSaved);
@@ -112,10 +137,13 @@ class _HomePageState extends State<HomePage> {
               headingAccuracy: 0,
             );
             _isLocationReady = true;
+            _setupStream(); // Start stream with cached location
           });
         }
       }
     }
+
+    // Always fetch fresh location in background or foreground if cache invalid
     _getCurrentLocation(forceHighAccuracy: !isCacheValid);
   }
 
@@ -148,23 +176,47 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           _myPosition = freshPosition;
           _isLocationReady = true;
+          // If stream wasn't set up yet (first run), set it up now
+          if (_postsStream == null) {
+            _setupStream();
+          }
         });
       }
     } catch (e) {
       debugPrint("GPS Error: $e");
-      if (mounted) setState(() => _isLocationReady = true);
+      // Still allow app to work without precise location if error
+      if (mounted) {
+        setState(() {
+          _isLocationReady = true;
+          if (_postsStream == null) _setupStream();
+        });
+      }
     }
   }
 
+  // 🟢 4. MANUAL REFRESH (Only this triggers skeleton/loading)
   Future<void> _refreshAll() async {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text("Updating location..."),
+        content: Text("Updating location & feeds..."),
         duration: Duration(milliseconds: 1000),
+        backgroundColor: Palette.primary,
       ),
     );
+
+    // Set stream to null to force UI to show Skeleton Loader
+    setState(() {
+      _postsStream = null;
+    });
+
     await _loadSettings();
     await _getCurrentLocation(forceHighAccuracy: true);
+
+    // Re-initialize stream
+    _setupStream();
+
+    // Trigger rebuild
+    if (mounted) setState(() {});
   }
 
   Widget _buildMarketOverviewChart(int shopCount, int indCount) {
@@ -205,9 +257,9 @@ class _HomePageState extends State<HomePage> {
                   style: TextStyle(color: Colors.grey[600], fontSize: 12),
                 ),
                 const SizedBox(height: 12),
-                _buildLegendItem("Shop Owners", shopCount, Colors.blue[700]!),
+                _buildLegendItem("Shop Owners", shopCount, Palette.secondary),
                 const SizedBox(height: 6),
-                _buildLegendItem("Individuals", indCount, Colors.orange[400]!),
+                _buildLegendItem("Individuals", indCount, Palette.primary),
               ],
             ),
           ),
@@ -220,13 +272,13 @@ class _HomePageState extends State<HomePage> {
                 centerSpaceRadius: 25,
                 sections: [
                   PieChartSectionData(
-                    color: Colors.blue[700],
+                    color: Palette.secondary,
                     value: shopCount.toDouble(),
                     radius: 25,
                     showTitle: false,
                   ),
                   PieChartSectionData(
-                    color: Colors.orange[400],
+                    color: Palette.primary,
                     value: indCount.toDouble(),
                     radius: 25,
                     showTitle: false,
@@ -257,9 +309,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ------------------------------------------------------------
-  // UPDATED: Modern Skeleton Loader to match new Card Appearance
-  // ------------------------------------------------------------
   Widget _buildSkeletonLoader() {
     return ListView.builder(
       itemCount: 4,
@@ -267,10 +316,10 @@ class _HomePageState extends State<HomePage> {
       itemBuilder: (context, index) {
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          height: 310, // Match new card height approx
+          height: 310,
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(20), // Matches new card radius
+            borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
                 color: Colors.grey.withOpacity(0.05),
@@ -282,7 +331,6 @@ class _HomePageState extends State<HomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Image Placeholder
               Container(
                 height: 160,
                 decoration: BoxDecoration(
@@ -292,19 +340,15 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
-              // Content Placeholder
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title
                     Container(height: 20, width: 180, color: Colors.grey[200]),
                     const SizedBox(height: 8),
-                    // Location/Type
                     Container(height: 14, width: 120, color: Colors.grey[200]),
                     const SizedBox(height: 16),
-                    // Action Buttons Row
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -342,10 +386,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final DateTime sevenDaysAgo = DateTime.now().subtract(
-      const Duration(days: 7),
-    );
-
     return Scaffold(
       backgroundColor: Colors.grey[50],
       drawer: const SidebarDrawer(isHome: true),
@@ -355,7 +395,7 @@ class _HomePageState extends State<HomePage> {
             expandedHeight: 160.0,
             floating: false,
             pinned: true,
-            backgroundColor: Colors.green[800],
+            backgroundColor: Palette.primary,
             elevation: 0,
             leading: Builder(
               builder: (context) => IconButton(
@@ -382,11 +422,7 @@ class _HomePageState extends State<HomePage> {
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.green[900]!, Colors.green[600]!],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  gradient: Palette.primaryGradient, // Using updated Palette
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -423,7 +459,7 @@ class _HomePageState extends State<HomePage> {
                         decoration: InputDecoration(
                           prefixIcon: const Icon(
                             Icons.search,
-                            color: Colors.green,
+                            color: Palette.primary,
                           ),
                           hintText: "Search cement, rice, iron rods...",
                           hintStyle: TextStyle(color: Colors.grey[400]),
@@ -470,19 +506,19 @@ class _HomePageState extends State<HomePage> {
                         onSelected: (bool selected) =>
                             setState(() => _selectedFilter = filterName),
                         backgroundColor: Colors.white,
-                        selectedColor: Colors.green[50],
-                        checkmarkColor: Colors.green[800],
+                        selectedColor: Palette.primary.withOpacity(0.1),
+                        checkmarkColor: Palette.primary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                           side: BorderSide(
                             color: isSelected
-                                ? Colors.green[800]!
+                                ? Palette.primary
                                 : Colors.grey[300]!,
                           ),
                         ),
                         labelStyle: TextStyle(
                           color: isSelected
-                              ? Colors.green[800]
+                              ? Palette.primary
                               : Colors.grey[700],
                           fontWeight: isSelected
                               ? FontWeight.bold
@@ -499,12 +535,16 @@ class _HomePageState extends State<HomePage> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.radar, size: 14, color: Colors.green[800]),
+                        const Icon(
+                          Icons.radar,
+                          size: 14,
+                          color: Palette.primary,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           "Scanning radius: ${_searchRadiusKm.round()} km",
-                          style: TextStyle(
-                            color: Colors.green[800],
+                          style: const TextStyle(
+                            color: Palette.primary,
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                           ),
@@ -515,18 +555,10 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
+
+          // 🟢 5. STREAMBUILDER (Using cached stream variable)
           StreamBuilder<QuerySnapshot>(
-            stream: _isLocationReady
-                ? FirebaseFirestore.instance
-                      .collection('posts')
-                      .where(
-                        'timestamp',
-                        isGreaterThan: Timestamp.fromDate(sevenDaysAgo),
-                      )
-                      .orderBy('timestamp', descending: true)
-                      .limit(150)
-                      .snapshots()
-                : null,
+            stream: _postsStream,
             builder: (context, snapshot) {
               if (snapshot.hasError) {
                 return SliverFillRemaining(
@@ -534,9 +566,8 @@ class _HomePageState extends State<HomePage> {
                 );
               }
 
-              // --- WAITING STATES ---
-              if (snapshot.connectionState == ConnectionState.none ||
-                  snapshot.connectionState == ConnectionState.waiting) {
+              // Only show skeleton if explicitly waiting (on first load or refresh)
+              if (snapshot.connectionState == ConnectionState.waiting) {
                 return SliverFillRemaining(child: _buildSkeletonLoader());
               }
 
@@ -552,7 +583,7 @@ class _HomePageState extends State<HomePage> {
                           color: Colors.grey,
                         ),
                         SizedBox(height: 10),
-                        Text("No recent intel found nearby."),
+                        Text("No recent intel found."),
                       ],
                     ),
                   ),
@@ -560,9 +591,14 @@ class _HomePageState extends State<HomePage> {
               }
 
               var docs = snapshot.data!.docs;
-              docs = docs
-                  .where((d) => (d.data() as Map)['uploader_id'] != user?.uid)
-                  .toList();
+
+              // 🟢 6. IN-MEMORY FILTERING
+              // Filter out own posts ONLY if "All" is NOT selected
+              if (_selectedFilter != "All") {
+                docs = docs
+                    .where((d) => (d.data() as Map)['uploader_id'] != user?.uid)
+                    .toList();
+              }
 
               if (_searchQuery.isNotEmpty) {
                 docs = docs.where((d) {
@@ -581,6 +617,7 @@ class _HomePageState extends State<HomePage> {
                 }).toList();
               }
 
+              // Filter by distance (in memory, instant)
               if (_myPosition != null) {
                 docs = docs.where((d) {
                   final data = d.data() as Map<String, dynamic>;
@@ -596,9 +633,11 @@ class _HomePageState extends State<HomePage> {
                   return dist <= (_searchRadiusKm * 1000);
                 }).toList();
               } else {
+                // If location is lost for some reason, show skeleton
                 return SliverFillRemaining(child: _buildSkeletonLoader());
               }
 
+              // Filter by Type
               if (_selectedFilter == "Shops Only") {
                 docs = docs
                     .where(
@@ -613,14 +652,17 @@ class _HomePageState extends State<HomePage> {
                     .toList();
               }
 
+              // Sort
               docs.sort((a, b) {
                 final dataA = a.data() as Map<String, dynamic>;
                 final dataB = b.data() as Map<String, dynamic>;
+
                 if (_selectedFilter == "Cheapest") {
                   return ((dataA['price'] ?? 0) as num).compareTo(
                     (dataB['price'] ?? 0) as num,
                   );
                 }
+
                 if (_myPosition == null) return 0;
                 double distA = Geolocator.distanceBetween(
                   _myPosition!.latitude,
@@ -637,20 +679,16 @@ class _HomePageState extends State<HomePage> {
                 return distA.compareTo(distB);
               });
 
-              // 🟢 PRE-CACHE IMAGES FOR BETTER PERFORMANCE
-              // Cache all post images and shop front images to ensure instant loading in product details
+              // Pre-cache visible images
               for (var doc in docs) {
                 final data = doc.data() as Map<String, dynamic>;
                 final imageUrl = data['image_url'] as String?;
                 final shopFrontUrl = data['shop_front_image_url'] as String?;
 
                 if (imageUrl != null && imageUrl.isNotEmpty) {
-                  // Pre-cache main product image
                   precacheImage(CachedNetworkImageProvider(imageUrl), context);
                 }
-
                 if (shopFrontUrl != null && shopFrontUrl.isNotEmpty) {
-                  // Pre-cache shop front image
                   precacheImage(
                     CachedNetworkImageProvider(shopFrontUrl),
                     context,
@@ -658,15 +696,16 @@ class _HomePageState extends State<HomePage> {
                 }
               }
 
-              // Stats for Chart
+              // Calculate Chart Stats based on filtered data
               int shopCount = 0;
               int indCount = 0;
               for (var doc in docs) {
                 final type = (doc.data() as Map)['poster_type'];
-                if (type == 'Shop Owner')
+                if (type == 'Shop Owner') {
                   shopCount++;
-                else
+                } else {
                   indCount++;
+                }
               }
 
               if (docs.isEmpty) {
@@ -675,16 +714,13 @@ class _HomePageState extends State<HomePage> {
                 );
               }
 
-              // --------------------------------------------------------
-              // LOGIC: Chart only for "Nearest Me" and "Cheapest"
-              // --------------------------------------------------------
               bool showChart =
                   (_selectedFilter == "Nearest Me" ||
-                  _selectedFilter == "Cheapest");
+                  _selectedFilter == "Cheapest" ||
+                  _selectedFilter == "All");
 
               return SliverList(
                 delegate: SliverChildBuilderDelegate((context, index) {
-                  // IF index is 0, we conditionally show the chart + the first card
                   if (index == 0) {
                     return Column(
                       children: [
@@ -727,10 +763,6 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// ---------------------------------------------------------------------
-// MODERNIZED CARD WIDGET
-// Features: Pixel overflow protection, clean layout, modern styling
-// ---------------------------------------------------------------------
 class IntelCard extends StatelessWidget {
   final Map<String, dynamic> data;
   final String docId;
@@ -792,7 +824,7 @@ class IntelCard extends StatelessWidget {
                   ListTile(
                     leading: const Icon(
                       Icons.chat_bubble_rounded,
-                      color: Colors.green,
+                      color: Palette.secondary,
                     ),
                     title: const Text("Start Private Chat"),
                     subtitle: const Text("Secure end-to-end encrypted"),
@@ -908,7 +940,7 @@ class IntelCard extends StatelessWidget {
     double lat = (data['latitude'] ?? 0).toDouble();
     double lng = (data['longitude'] ?? 0).toDouble();
 
-    // Distance Calculation (if user position exists)
+    // Distance Calculation
     String distanceString = "";
     if (userPosition != null && lat != 0 && lng != 0) {
       double dist = Geolocator.distanceBetween(
@@ -947,7 +979,7 @@ class IntelCard extends StatelessWidget {
         ),
         child: Column(
           children: [
-            // 1. IMAGE SECTION (Fixed Height)
+            // 1. IMAGE SECTION
             Stack(
               children: [
                 ClipRRect(
@@ -1008,7 +1040,7 @@ class IntelCard extends StatelessWidget {
                           onTap: () => _toggleSave(context, isSaved),
                           child: Icon(
                             isSaved ? Icons.favorite : Icons.favorite_border,
-                            color: isSaved ? Colors.redAccent : Colors.white,
+                            color: isSaved ? Palette.error : Colors.white,
                             size: 22,
                           ),
                         );
@@ -1025,7 +1057,6 @@ class IntelCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Row: Title + Price (Handles overflow)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1048,10 +1079,10 @@ class IntelCard extends StatelessWidget {
                         child: Text(
                           NumberFormat.currency(symbol: 'GH₵').format(price),
                           textAlign: TextAlign.right,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
-                            color: Colors.green[800],
+                            color: Palette.primary,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1061,7 +1092,6 @@ class IntelCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
 
-                  // Location & Type Row
                   Row(
                     children: [
                       Icon(
@@ -1084,8 +1114,8 @@ class IntelCard extends StatelessWidget {
                         ),
                       ),
                       if (distanceString.isNotEmpty) ...[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6),
                           child: Icon(
                             Icons.circle,
                             size: 4,
@@ -1117,7 +1147,6 @@ class IntelCard extends StatelessWidget {
                     child: Divider(height: 1),
                   ),
 
-                  // 3. ACTION BUTTONS (Distributed evenly)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1125,19 +1154,18 @@ class IntelCard extends StatelessWidget {
                         context,
                         Icons.call,
                         "Call",
-                        Colors.green,
-                        Colors.green[50]!,
+                        Palette.primary,
+                        Palette.primary.withOpacity(0.1),
                         () => _launchURL(context, "tel:$phone"),
                       ),
                       _actionBtn(
                         context,
                         FontAwesomeIcons.whatsapp,
                         "Chat",
-                        Colors.teal,
-                        Colors.teal[50]!,
+                        Palette.secondary,
+                        Palette.secondary.withOpacity(0.1),
                         () => _openWhatsApp(context, whatsapp),
                       ),
-                      // Comment Button with Counter
                       StreamBuilder<QuerySnapshot>(
                         stream: FirebaseFirestore.instance
                             .collection('posts')
@@ -1169,7 +1197,6 @@ class IntelCard extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    // 🟢 FIX: Always show count (even "0") so button size is consistent
                                     count.toString(),
                                     style: TextStyle(
                                       fontSize: 12,
@@ -1187,8 +1214,8 @@ class IntelCard extends StatelessWidget {
                         context,
                         Icons.directions,
                         "Map",
-                        Colors.blue,
-                        Colors.blue[50]!,
+                        Palette.primaryAccent,
+                        Palette.primaryAccent.withOpacity(0.1),
                         () => _openMap(context, lat, lng),
                       ),
                     ],

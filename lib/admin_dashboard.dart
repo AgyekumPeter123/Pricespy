@@ -16,6 +16,7 @@ import 'services/post_service.dart';
 import 'admin_posts_tab.dart';
 import 'admin_user_posts_page.dart';
 import 'admin_service.dart';
+import 'constants/palette.dart';
 
 enum UserFilter { all, active, restricted }
 
@@ -64,7 +65,7 @@ class _AdminDashboardState extends State<AdminDashboard>
           message,
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: isError ? Colors.red.shade800 : Colors.teal.shade700,
+        backgroundColor: isError ? Palette.error : Palette.secondary,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         margin: const EdgeInsets.all(12),
@@ -143,7 +144,7 @@ class _AdminDashboardState extends State<AdminDashboard>
           ),
           title: const Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange),
+              Icon(Icons.warning_amber_rounded, color: Palette.tertiary),
               SizedBox(width: 10),
               Text("Issue Warning"),
             ],
@@ -157,14 +158,14 @@ class _AdminDashboardState extends State<AdminDashboard>
                   "Severity Level",
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey,
+                    color: Palette.textMedium,
                   ),
                 ),
                 const SizedBox(height: 5),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
+                    border: Border.all(color: Palette.background),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: DropdownButtonHideUnderline(
@@ -190,7 +191,7 @@ class _AdminDashboardState extends State<AdminDashboard>
                   "Message to User",
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey,
+                    color: Palette.textMedium,
                   ),
                 ),
                 const SizedBox(height: 5),
@@ -203,7 +204,7 @@ class _AdminDashboardState extends State<AdminDashboard>
                       borderRadius: BorderRadius.circular(8),
                     ),
                     filled: true,
-                    fillColor: Colors.grey.shade50,
+                    fillColor: Palette.background,
                   ),
                 ),
               ],
@@ -216,8 +217,8 @@ class _AdminDashboardState extends State<AdminDashboard>
             ),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red.shade700,
-                foregroundColor: Colors.white,
+                backgroundColor: Palette.error,
+                foregroundColor: Palette.surface,
               ),
               icon: const Icon(Icons.send, size: 16),
               label: const Text("SEND"),
@@ -345,7 +346,7 @@ class _AdminDashboardState extends State<AdminDashboard>
               child: const Text("CANCEL"),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              style: ElevatedButton.styleFrom(backgroundColor: Palette.error),
               onPressed: () {
                 final amount = int.tryParse(durationController.text);
                 if (amount != null && amount > 0) {
@@ -353,10 +354,7 @@ class _AdminDashboardState extends State<AdminDashboard>
                   _performRestriction(userId, amount, durationType);
                 }
               },
-              child: const Text(
-                "RESTRICT",
-                style: TextStyle(color: Colors.white),
-              ),
+              child: Text("RESTRICT", style: TextStyle(color: Palette.surface)),
             ),
           ],
         ),
@@ -406,22 +404,22 @@ class _AdminDashboardState extends State<AdminDashboard>
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Palette.background,
       drawer: const SidebarDrawer(),
       appBar: AppBar(
         title: const Text(
           "ADMIN CONSOLE",
           style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.1),
         ),
-        backgroundColor: const Color(0xFF263238),
-        foregroundColor: Colors.white,
+        backgroundColor: Palette.primary,
+        foregroundColor: Palette.surface,
         centerTitle: true,
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.tealAccent,
+          indicatorColor: Palette.primaryAccent,
           indicatorWeight: 4,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
+          labelColor: Palette.surface,
+          unselectedLabelColor: Palette.surface.withOpacity(0.6),
           tabs: const [
             Tab(text: "REPORTS"),
             Tab(text: "USERS"),
@@ -496,17 +494,14 @@ class _AdminDashboardState extends State<AdminDashboard>
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [
-                      Colors.blueGrey.shade800,
-                      Colors.blueGrey.shade900,
-                    ],
+                    colors: [Palette.primary, Palette.secondary],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: const [
                     BoxShadow(
-                      color: Colors.black26,
+                      color: Color.fromRGBO(45, 55, 72, 0.26),
                       blurRadius: 10,
                       offset: Offset(0, 5),
                     ),
@@ -522,14 +517,14 @@ class _AdminDashboardState extends State<AdminDashboard>
                           const Text(
                             "Pending Issues",
                             style: TextStyle(
-                              color: Colors.white70,
+                              color: Color.fromRGBO(247, 250, 252, 0.7),
                               fontSize: 14,
                             ),
                           ),
                           Text(
                             "${docs.length}",
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: Palette.surface,
                               fontSize: 36,
                               fontWeight: FontWeight.bold,
                             ),
@@ -537,8 +532,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                           const SizedBox(height: 10),
                           Text(
                             "$displayLabel:",
-                            style: const TextStyle(
-                              color: Colors.white38,
+                            style: TextStyle(
+                              color: Color.fromRGBO(247, 250, 252, 0.38),
                               fontSize: 12,
                             ),
                           ),
@@ -546,8 +541,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                             displayValue,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.orangeAccent,
+                            style: TextStyle(
+                              color: Palette.tertiary,
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
                             ),
@@ -597,11 +592,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                           ),
                           child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: Colors.red.shade50,
-                              child: const Icon(
-                                Icons.warning,
-                                color: Colors.red,
-                              ),
+                              backgroundColor: Palette.background,
+                              child: Icon(Icons.warning, color: Palette.error),
                             ),
                             title: Text(
                               data['reason'] ?? "Violation",
@@ -612,10 +604,10 @@ class _AdminDashboardState extends State<AdminDashboard>
                             subtitle: Text(
                               "Item: ${data['productName'] ?? 'Unknown'}",
                             ),
-                            trailing: const Icon(
+                            trailing: Icon(
                               Icons.arrow_forward_ios,
                               size: 16,
-                              color: Colors.grey,
+                              color: Palette.textMedium,
                             ),
                             onTap: () =>
                                 _showReportActionSheet(docs[index].id, data),
@@ -673,9 +665,9 @@ class _AdminDashboardState extends State<AdminDashboard>
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Palette.surface,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: Palette.background),
               ),
               child: Column(
                 children: [
@@ -687,7 +679,7 @@ class _AdminDashboardState extends State<AdminDashboard>
                         child: _buildStatItem(
                           "All Users",
                           "$total",
-                          Colors.blue.shade700,
+                          Palette.primary,
                           isActive: _currentUserFilter == UserFilter.all,
                           onTap: () => setState(
                             () => _currentUserFilter = UserFilter.all,
@@ -697,13 +689,13 @@ class _AdminDashboardState extends State<AdminDashboard>
                       Container(
                         width: 1,
                         height: 40,
-                        color: Colors.grey.shade300,
+                        color: Palette.background,
                       ),
                       Expanded(
                         child: _buildStatItem(
                           "Active", // Shortened label
                           "$active",
-                          Colors.green.shade700,
+                          Palette.secondary, // Sage
                           isActive: _currentUserFilter == UserFilter.active,
                           onTap: () => setState(
                             () => _currentUserFilter = UserFilter.active,
@@ -713,13 +705,13 @@ class _AdminDashboardState extends State<AdminDashboard>
                       Container(
                         width: 1,
                         height: 40,
-                        color: Colors.grey.shade300,
+                        color: Palette.background,
                       ),
                       Expanded(
                         child: _buildStatItem(
                           "Restricted",
                           "$restricted",
-                          Colors.red.shade700,
+                          Palette.error,
                           isActive: _currentUserFilter == UserFilter.restricted,
                           onTap: () => setState(
                             () => _currentUserFilter = UserFilter.restricted,
@@ -733,9 +725,9 @@ class _AdminDashboardState extends State<AdminDashboard>
                     borderRadius: BorderRadius.circular(10),
                     child: LinearProgressIndicator(
                       value: total == 0 ? 0 : active / total,
-                      backgroundColor: Colors.red.shade100,
+                      backgroundColor: Palette.background,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        Colors.green.shade400,
+                        Palette.secondary,
                       ),
                       minHeight: 8,
                     ),
@@ -752,7 +744,7 @@ class _AdminDashboardState extends State<AdminDashboard>
                   hintText: "Search user email...",
                   prefixIcon: const Icon(Icons.search),
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor: Palette.surface,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 20),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(30),
@@ -778,12 +770,12 @@ class _AdminDashboardState extends State<AdminDashboard>
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     elevation: 0,
-                    color: Colors.white,
+                    color: Palette.surface,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                       side: BorderSide(
                         color: isRestricted
-                            ? Colors.red.shade100
+                            ? Palette.background
                             : Colors.transparent,
                       ),
                     ),
@@ -808,15 +800,18 @@ class _AdminDashboardState extends State<AdminDashboard>
                           ? Text(
                               "⛔ Restricted until: ${DateFormat('MMM d, h:mm a').format(restrictedUntil.toDate())}",
                               style: TextStyle(
-                                color: Colors.red.shade700,
+                                color: Palette.error,
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
                             )
                           : Text(userData['email'] ?? ""),
                       trailing: isRestricted
-                          ? const Icon(Icons.lock, color: Colors.red)
-                          : const Icon(Icons.check_circle, color: Colors.green),
+                          ? Icon(Icons.lock, color: Palette.error)
+                          : const Icon(
+                              Icons.check_circle,
+                              color: Palette.secondary,
+                            ),
                       onTap: () =>
                           _showUserActionSheet(users[index].id, userData),
                     ),
@@ -865,7 +860,7 @@ class _AdminDashboardState extends State<AdminDashboard>
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
-                color: isActive ? color : Colors.grey.shade600,
+                color: isActive ? color : Palette.textMedium,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -891,7 +886,7 @@ class _AdminDashboardState extends State<AdminDashboard>
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: Palette.background,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -902,7 +897,7 @@ class _AdminDashboardState extends State<AdminDashboard>
             ),
             const Divider(height: 30),
             ListTile(
-              leading: const Icon(Icons.zoom_in, color: Colors.indigo),
+              leading: Icon(Icons.zoom_in, color: Palette.primary),
               title: const Text("Investigate Content"),
               subtitle: const Text("Open post details"),
               onTap: () async {
@@ -949,9 +944,9 @@ class _AdminDashboardState extends State<AdminDashboard>
               },
             ),
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.warning_amber_rounded,
-                color: Colors.orange,
+                color: Palette.tertiary,
               ),
               title: const Text("Warning Chat with Accused"),
               onTap: () {
@@ -963,7 +958,7 @@ class _AdminDashboardState extends State<AdminDashboard>
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete_forever, color: Colors.red),
+              leading: Icon(Icons.delete_forever, color: Palette.error),
               title: const Text("Delete Post Forever"),
               onTap: () {
                 Navigator.pop(sheetContext);
@@ -978,7 +973,7 @@ class _AdminDashboardState extends State<AdminDashboard>
             ListTile(
               leading: const Icon(
                 Icons.check_circle_outline,
-                color: Colors.green,
+                color: Palette.secondary,
               ),
               title: const Text("Dismiss Report"),
               onTap: () {
@@ -1009,7 +1004,7 @@ class _AdminDashboardState extends State<AdminDashboard>
           const SizedBox(height: 20),
           if (!isRestricted)
             ListTile(
-              leading: const Icon(Icons.timer_off, color: Colors.orange),
+              leading: Icon(Icons.timer_off, color: Palette.tertiary),
               title: const Text("Restrict Access"),
               onTap: () {
                 Navigator.pop(context);
@@ -1018,7 +1013,7 @@ class _AdminDashboardState extends State<AdminDashboard>
             )
           else
             ListTile(
-              leading: const Icon(Icons.lock_open, color: Colors.green),
+              leading: const Icon(Icons.lock_open, color: Palette.secondary),
               title: const Text("Lift Restriction"),
               onTap: () {
                 Navigator.pop(context);
@@ -1026,7 +1021,7 @@ class _AdminDashboardState extends State<AdminDashboard>
               },
             ),
           ListTile(
-            leading: const Icon(Icons.chat, color: Colors.blue),
+            leading: Icon(Icons.chat, color: Palette.primary),
             title: const Text("Send Warning Message"),
             onTap: () {
               Navigator.pop(context);
@@ -1036,7 +1031,7 @@ class _AdminDashboardState extends State<AdminDashboard>
 
           // 🟢 NEW OPTION: View All Posts
           ListTile(
-            leading: const Icon(Icons.grid_view, color: Colors.indigo),
+            leading: Icon(Icons.grid_view, color: Palette.primary),
             title: const Text("View All Posts"),
             subtitle: const Text("Manage, delete, or investigate user content"),
             onTap: () {
@@ -1054,7 +1049,7 @@ class _AdminDashboardState extends State<AdminDashboard>
           ),
 
           ListTile(
-            leading: const Icon(Icons.delete_forever, color: Colors.red),
+            leading: Icon(Icons.delete_forever, color: Palette.error),
             title: const Text("Delete User & Data"),
             onTap: () {
               Navigator.pop(context);

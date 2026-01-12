@@ -600,7 +600,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ],
             )
           : AppBar(
-              backgroundColor: Colors.green[800],
+              backgroundColor: const Color(0xFF1A6EA0),
               titleSpacing: 0,
               title: StreamBuilder<DocumentSnapshot>(
                 stream: _statusService.getUserPresenceStream(widget.receiverId),
@@ -655,7 +655,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: (isTyping || isOnline)
-                                        ? const Color(0xFFD9FDD3)
+                                        ? const Color(0xFFD4F1F4) // Light Blue
                                         : Colors.white70,
                                     fontWeight: isTyping
                                         ? FontWeight.bold

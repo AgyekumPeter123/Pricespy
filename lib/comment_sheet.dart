@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'services/connectivity_service.dart';
+import 'constants/palette.dart';
 
 class CommentSheet extends StatefulWidget {
   final String postId;
@@ -142,7 +143,7 @@ class _CommentSheetState extends State<CommentSheet> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+            child: const Text("Delete", style: TextStyle(color: Palette.error)),
           ),
         ],
       ),
@@ -201,7 +202,7 @@ class _CommentSheetState extends State<CommentSheet> {
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
       decoration: const BoxDecoration(
-        color: Colors.white,
+        color: Palette.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
@@ -213,7 +214,7 @@ class _CommentSheetState extends State<CommentSheet> {
               height: 4,
               width: 40,
               decoration: BoxDecoration(
-                color: Colors.grey[300],
+                color: Palette.background,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -244,7 +245,7 @@ class _CommentSheetState extends State<CommentSheet> {
                   return const Center(
                     child: Text(
                       "No comments yet. Be the first!",
-                      style: TextStyle(color: Colors.grey),
+                      style: TextStyle(color: Palette.textMedium),
                     ),
                   );
                 }
@@ -293,7 +294,7 @@ class _CommentSheetState extends State<CommentSheet> {
                                 Container(
                                   width: 30,
                                   height: 1,
-                                  color: Colors.grey[300],
+                                  color: Palette.background,
                                   margin: const EdgeInsets.only(right: 10),
                                 ),
                                 GestureDetector(
@@ -302,10 +303,10 @@ class _CommentSheetState extends State<CommentSheet> {
                                     isExpanded
                                         ? "Hide replies"
                                         : "View ${replies.length} replies",
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.grey[600],
+                                      color: Palette.textMedium,
                                     ),
                                   ),
                                 ),
@@ -375,7 +376,7 @@ class _CommentSheetState extends State<CommentSheet> {
                       decoration: InputDecoration(
                         hintText: "Add a comment...",
                         filled: true,
-                        fillColor: Colors.grey[100],
+                        fillColor: Palette.background,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(25),
                           borderSide: BorderSide.none,
@@ -389,7 +390,7 @@ class _CommentSheetState extends State<CommentSheet> {
                   ),
                   const SizedBox(width: 8),
                   CircleAvatar(
-                    backgroundColor: Colors.green,
+                    backgroundColor: Palette.secondary,
                     child: IconButton(
                       icon: _isSending
                           ? const SizedBox(
@@ -430,7 +431,7 @@ class _CommentSheetState extends State<CommentSheet> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       color: isReplyingToThis
-          ? Colors.blue.withOpacity(0.05)
+          ? Palette.primary.withOpacity(0.05) // 🟢 Updated Highlight
           : Colors.transparent,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Column(
@@ -448,7 +449,11 @@ class _CommentSheetState extends State<CommentSheet> {
                       ? CachedNetworkImageProvider(data['avatar'])
                       : null,
                   child: (data['avatar'] == null || data['avatar'].isEmpty)
-                      ? Icon(Icons.person, size: 16, color: Colors.blue[800])
+                      ? const Icon(
+                          Icons.person,
+                          size: 16,
+                          color: Palette.primary, // 🟢 Updated Avatar Fallback
+                        )
                       : null,
                 ),
                 const SizedBox(width: 10),
@@ -472,7 +477,8 @@ class _CommentSheetState extends State<CommentSheet> {
                               padding: EdgeInsets.only(left: 4.0),
                               child: Icon(
                                 Icons.verified,
-                                color: Colors.blue,
+                                color: Palette
+                                    .primaryAccent, // 🟢 Updated Badge Color
                                 size: 14,
                               ),
                             ),
@@ -492,9 +498,9 @@ class _CommentSheetState extends State<CommentSheet> {
                           if (data['tagged_user'] != null)
                             Text(
                               "@${data['tagged_user']} ",
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 13,
-                                color: Colors.blue[800],
+                                color: Palette.primary, // 🟢 Updated Tag Color
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -535,7 +541,7 @@ class _CommentSheetState extends State<CommentSheet> {
                                     "Delete",
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: Colors.red,
+                                      color: Palette.error, // 🟢 Updated
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -570,9 +576,9 @@ class _CommentSheetState extends State<CommentSheet> {
                     children: [
                       Text(
                         "Replying to @$_taggedUserName",
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 11,
-                          color: Colors.green[800],
+                          color: Palette.secondary, // 🟢 Updated Reply Status
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -609,9 +615,9 @@ class _CommentSheetState extends State<CommentSheet> {
                             _sendInlineReply(_replyController.text),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        icon: Icon(
+                        icon: const Icon(
                           Icons.send,
-                          color: Colors.green[800],
+                          color: Palette.primary, // 🟢 Updated Send Icon
                           size: 20,
                         ),
                       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../constants/palette.dart';
 
 class ChatInput extends StatelessWidget {
   final TextEditingController controller;
@@ -39,10 +40,10 @@ class ChatInput extends StatelessWidget {
     if (isLocked) {
       return Container(
         padding: const EdgeInsets.all(12),
-        color: Colors.white,
+        color: Palette.surface,
         child: Row(
           children: [
-            const Icon(Icons.mic, color: Colors.red),
+            const Icon(Icons.mic, color: Palette.error),
             const SizedBox(width: 10),
             Text(recordDuration),
             const Spacer(),
@@ -51,7 +52,10 @@ class ChatInput extends StatelessWidget {
               child: const Text("Cancel"),
             ),
             IconButton(
-              icon: const Icon(Icons.send, color: Colors.green),
+              icon: const Icon(
+                Icons.send,
+                color: Palette.primary,
+              ), // 🟢 Updated to Primary
               onPressed: () => onStopRecording(true),
             ),
           ],
@@ -64,7 +68,7 @@ class ChatInput extends StatelessWidget {
         if (replyMessage != null)
           Container(
             padding: const EdgeInsets.all(8),
-            color: Colors.grey[200],
+            color: Palette.background,
             child: Row(
               children: [
                 if (replyMessage!['attachmentUrl'] != null)
@@ -81,7 +85,7 @@ class ChatInput extends StatelessWidget {
                     ),
                   )
                 else
-                  const Icon(Icons.reply, size: 20, color: Colors.green),
+                  const Icon(Icons.reply, size: 20, color: Palette.secondary),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -91,7 +95,7 @@ class ChatInput extends StatelessWidget {
                         "Replying to ${replyMessage!['senderName']}",
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.green,
+                          color: Palette.secondary,
                           fontSize: 12,
                         ),
                       ),
@@ -100,7 +104,7 @@ class ChatInput extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Colors.black54,
+                          color: Palette.textMedium,
                           fontSize: 12,
                         ),
                       ),
@@ -116,7 +120,6 @@ class ChatInput extends StatelessWidget {
           ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          // FIX: Changed from Colors.white to Colors.transparent
           color: Colors.transparent,
           child: Stack(
             alignment: Alignment.centerRight,
@@ -127,7 +130,10 @@ class ChatInput extends StatelessWidget {
                 children: [
                   if (!isRecording)
                     IconButton(
-                      icon: const Icon(Icons.attach_file, color: Colors.grey),
+                      icon: const Icon(
+                        Icons.attach_file,
+                        color: Palette.textMedium,
+                      ),
                       onPressed: onAttachmentPressed,
                     ),
                   Expanded(
@@ -136,7 +142,7 @@ class ChatInput extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             child: Text(
                               "Slide to cancel <   Recording: $recordDuration",
-                              style: const TextStyle(color: Colors.grey),
+                              style: const TextStyle(color: Palette.textMedium),
                             ),
                           )
                         : TextField(
@@ -146,7 +152,7 @@ class ChatInput extends StatelessWidget {
                             decoration: InputDecoration(
                               hintText: "Message",
                               filled: true,
-                              fillColor: Colors.grey[100],
+                              fillColor: Palette.background,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(25),
                                 borderSide: BorderSide.none,
@@ -176,19 +182,21 @@ class ChatInput extends StatelessWidget {
                       onLongPressMoveUpdate: hasText
                           ? null
                           : (details) {
-                              if (details.offsetFromOrigin.dy < -50)
+                              if (details.offsetFromOrigin.dy < -50) {
                                 onLockRecording();
-                              if (details.offsetFromOrigin.dx < -100)
+                              }
+                              if (details.offsetFromOrigin.dx < -100) {
                                 onCancelRecording();
+                              }
                             },
                       onLongPress: hasText ? null : onStartRecording,
                       onLongPressEnd: hasText
                           ? null
                           : (details) {
-                              if (isRecording && !isLocked)
+                              if (isRecording && !isLocked) {
                                 onStopRecording(true);
+                              }
                             },
-
                       onTap: () {
                         if (hasText) onSendMessage(controller.text.trim());
                       },
@@ -197,7 +205,8 @@ class ChatInput extends StatelessWidget {
                         color: Colors.transparent,
                         child: CircleAvatar(
                           radius: 24,
-                          backgroundColor: Colors.green[800],
+                          // 🟢 FIXED: Changed from Colors.green[800] to Palette.primary
+                          backgroundColor: Palette.primary,
                           child: Icon(
                             !hasText
                                 ? (isRecording ? Icons.mic : Icons.mic_none)

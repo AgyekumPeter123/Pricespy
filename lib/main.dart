@@ -6,6 +6,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'splash_screen.dart';
 import 'onboarding_page.dart';
 import 'lifecycle_manager.dart';
+import 'constants/palette.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,15 +42,6 @@ class App extends StatelessWidget {
   final bool showOnboarding;
   const App({super.key, required this.showOnboarding});
 
-  // 🎨 PALETTE CONSTANTS
-  static const Color _primaryColor = Color(0xFF1A6EA0); // Deep Cerulean
-  static const Color _primaryAccent = Color(0xFF5AA9E6); // Sky Glow
-  static const Color _secondaryColor = Color(0xFF7C9E6F); // Earthy Sage
-  static const Color _tertiaryColor = Color(0xFFFF8A6C); // Warm Coral
-  static const Color _errorColor = Color(0xFFFC8181); // Soft Red
-  static const Color _neutralDark = Color(0xFF2D3748); // Cool Slate
-  static const Color _neutralLight = Color(0xFFF7FAFC); // Light Pearl
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -57,22 +49,22 @@ class App extends StatelessWidget {
       title: 'PriceSpy',
       theme: ThemeData(
         useMaterial3: true,
-        scaffoldBackgroundColor: _neutralLight, // Clean background
+        scaffoldBackgroundColor: Palette.background, // Clean background
         // 1. GLOBAL COLOR SCHEME
         colorScheme: const ColorScheme.light(
-          primary: _primaryColor,
-          secondary: _secondaryColor,
-          tertiary: _tertiaryColor,
-          error: _errorColor,
-          surface: Colors.white,
+          primary: Palette.primary,
+          secondary: Palette.secondary,
+          tertiary: Palette.tertiary,
+          error: Palette.error,
+          surface: Palette.surface,
           onPrimary: Colors.white, // Text on Blue buttons
           onSecondary: Colors.white, // Text on Green buttons
-          onSurface: _neutralDark, // Standard Text Color
+          onSurface: Palette.textDark, // Standard Text Color
         ),
 
         // 2. APP BAR THEME
         appBarTheme: const AppBarTheme(
-          backgroundColor: _primaryColor,
+          backgroundColor: Palette.primary,
           foregroundColor: Colors.white,
           centerTitle: true,
           elevation: 0,
@@ -81,7 +73,7 @@ class App extends StatelessWidget {
         // 3. BUTTON THEME (Global Styling)
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: _primaryColor,
+            backgroundColor: Palette.primary,
             foregroundColor: Colors.white,
             elevation: 2,
             shape: RoundedRectangleBorder(
@@ -98,7 +90,7 @@ class App extends StatelessWidget {
 
         // 4. CARD THEME
         cardTheme: CardThemeData(
-          color: Colors.white,
+          color: Palette.surface,
           elevation: 2,
           shadowColor: Colors.black.withValues(alpha: 0.1),
           shape: RoundedRectangleBorder(
@@ -110,7 +102,7 @@ class App extends StatelessWidget {
         // 5. INPUT DECORATION (Text Fields)
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: Colors.white,
+          fillColor: Palette.surface,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 16,
@@ -125,7 +117,7 @@ class App extends StatelessWidget {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: _primaryColor, width: 2),
+            borderSide: const BorderSide(color: Palette.primary, width: 2),
           ),
         ),
       ),

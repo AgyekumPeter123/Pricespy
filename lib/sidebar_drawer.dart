@@ -227,7 +227,7 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
       uiSettings: [
         AndroidUiSettings(
           toolbarTitle: 'Crop Profile Picture',
-          toolbarColor: Colors.green[800],
+          toolbarColor: const Color(0xFF1A6EA0),
           toolbarWidgetColor: Colors.white,
           initAspectRatio: CropAspectRatioPreset.square,
           lockAspectRatio: true,
@@ -269,7 +269,7 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Profile picture updated!"),
-            backgroundColor: Colors.green,
+            backgroundColor: Color(0xFF7C9E6F),
           ),
         );
       }
@@ -369,19 +369,22 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
-        color: isCurrent ? Colors.green.withOpacity(0.1) : Colors.transparent,
+        color: isCurrent
+            ? const Color(0xFF1A6EA0).withOpacity(0.1)
+            : Colors.transparent,
       ),
       child: ListTile(
         leading: Icon(
           icon,
           color:
-              iconColor ?? (isCurrent ? Colors.green[800] : Colors.grey[700]),
+              iconColor ??
+              (isCurrent ? const Color(0xFF1A6EA0) : Colors.grey[700]),
         ),
         title: Text(
           title,
           style: TextStyle(
             fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
-            color: isCurrent ? Colors.green[800] : Colors.black87,
+            color: isCurrent ? const Color(0xFF1A6EA0) : Colors.black87,
           ),
         ),
         trailing: trailing,
@@ -457,7 +460,7 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                 padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Colors.green[900]!, Colors.green[700]!],
+                    colors: [const Color(0xFF1A6EA0), const Color(0xFF5AA9E6)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -553,7 +556,7 @@ class _SidebarDrawerState extends State<SidebarDrawer> {
                               Text(
                                 user?.email ?? "",
                                 style: TextStyle(
-                                  color: Colors.green[100],
+                                  color: Colors.white70,
                                   fontSize: 12,
                                 ),
                                 maxLines: 1,

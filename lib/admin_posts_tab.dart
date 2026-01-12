@@ -7,6 +7,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'product_details_page.dart';
 import 'services/post_service.dart';
+import 'constants/palette.dart';
 
 class PostsManagementTab extends StatefulWidget {
   const PostsManagementTab({super.key});
@@ -197,11 +198,11 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Palette.surface,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: Colors.grey.withOpacity(0.1),
+                color: Palette.textDark.withOpacity(0.1),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),
@@ -215,7 +216,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.blueGrey,
+                  color: Palette.primary,
                 ),
               ),
               const SizedBox(height: 16),
@@ -231,7 +232,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                           "Total Posts",
                           totalPosts.toString(),
                           Icons.article,
-                          Colors.blue,
+                          Palette.primary,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -241,7 +242,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                           "Today",
                           postsToday.toString(),
                           Icons.today,
-                          Colors.green,
+                          Palette.secondary,
                         ),
                       ),
                     ],
@@ -254,7 +255,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                       "This Week",
                       postsThisWeek.toString(),
                       Icons.calendar_view_week,
-                      Colors.orange,
+                      Palette.tertiary,
                     ),
                   ),
                 ],
@@ -271,7 +272,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey,
+                      color: Palette.textMedium,
                     ),
                   ),
                 ),
@@ -284,21 +285,20 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                       barTouchData: BarTouchData(
                         enabled: true,
                         touchTooltipData: BarTouchTooltipData(
-                          // 🟢 FIX: Updated from tooltipBgColor to getTooltipColor
-                          getTooltipColor: (group) => Colors.blueGrey,
+                          getTooltipColor: (group) => Palette.primary,
                           getTooltipItem: (group, groupIndex, rod, rodIndex) {
                             String label = group.x == 0 ? 'Individual' : 'Shop';
                             return BarTooltipItem(
                               '$label\n',
-                              const TextStyle(
-                                color: Colors.white,
+                              TextStyle(
+                                color: Palette.surface,
                                 fontWeight: FontWeight.bold,
                               ),
                               children: <TextSpan>[
                                 TextSpan(
                                   text: (rod.toY).toInt().toString(),
-                                  style: const TextStyle(
-                                    color: Colors.yellow,
+                                  style: TextStyle(
+                                    color: Palette.primaryAccent,
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -316,7 +316,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                             reservedSize: 30,
                             getTitlesWidget: (value, meta) {
                               const style = TextStyle(
-                                color: Colors.black87,
+                                color: Palette.textDark,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 12,
                               );
@@ -357,7 +357,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                             BarChartRodData(
                               toY: (categoryCount['Individual'] ?? 0)
                                   .toDouble(),
-                              color: Colors.teal,
+                              color: Palette.primary,
                               width: 30,
                               borderRadius: const BorderRadius.vertical(
                                 top: Radius.circular(8),
@@ -376,7 +376,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                           barRods: [
                             BarChartRodData(
                               toY: (categoryCount['Shop'] ?? 0).toDouble(),
-                              color: Colors.purple,
+                              color: Palette.secondary,
                               width: 30,
                               borderRadius: const BorderRadius.vertical(
                                 top: Radius.circular(8),
@@ -469,7 +469,9 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
         if (isWaiting && _cachedPosts.isEmpty) {
           return const Padding(
             padding: EdgeInsets.all(16),
-            child: Center(child: CircularProgressIndicator()),
+            child: Center(
+              child: CircularProgressIndicator(color: Palette.primaryAccent),
+            ),
           );
         }
 
@@ -490,10 +492,21 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                       hintText: "Search posts by product or user...",
                       prefixIcon: const Icon(Icons.search),
                       filled: true,
-                      fillColor: Colors.grey[100],
+                      fillColor: Colors.white,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: Palette.primary,
+                          width: 1.5,
+                        ),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         vertical: 0,
@@ -512,12 +525,21 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                           child: FilterChip(
                             label: Text(filter),
                             selected: isSelected,
-                            selectedColor: Colors.blue[100],
-                            checkmarkColor: Colors.blue[900],
+                            selectedColor: Palette.primary.withOpacity(0.15),
+                            checkmarkColor: Palette.primary,
+                            backgroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              side: BorderSide(
+                                color: isSelected
+                                    ? Palette.primary
+                                    : Colors.grey.shade300,
+                              ),
+                            ),
                             labelStyle: TextStyle(
                               color: isSelected
-                                  ? Colors.blue[900]
-                                  : Colors.black87,
+                                  ? Palette.primary
+                                  : Palette.textDark,
                               fontWeight: isSelected
                                   ? FontWeight.bold
                                   : FontWeight.normal,
@@ -543,13 +565,16 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: Colors.blueGrey,
+                          color: Palette.textDark,
                         ),
                       ),
                       const Spacer(),
                       Text(
                         "${filteredDocs.length} Items",
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        style: const TextStyle(
+                          color: Palette.textMedium,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -558,7 +583,10 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
             ),
 
             if (isWaiting && _cachedPosts.isNotEmpty)
-              const LinearProgressIndicator(minHeight: 2, color: Colors.blue),
+              const LinearProgressIndicator(
+                minHeight: 2,
+                color: Palette.primaryAccent,
+              ),
 
             if (filteredDocs.isEmpty)
               Padding(
@@ -661,6 +689,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
+                        color: Palette.textDark,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -668,8 +697,8 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                     const SizedBox(height: 4),
                     Text(
                       "₵${price?.toStringAsFixed(2) ?? '0.00'}",
-                      style: TextStyle(
-                        color: Colors.green[800],
+                      style: const TextStyle(
+                        color: Palette.secondary, // 🟢 Updated to Sage Green
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -683,12 +712,14 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: isShop ? Colors.blue[50] : Colors.green[50],
+                            color: isShop
+                                ? Palette.secondary.withOpacity(0.1)
+                                : Palette.primary.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
                               color: isShop
-                                  ? Colors.blue[200]!
-                                  : Colors.green[200]!,
+                                  ? Palette.secondary.withOpacity(0.5)
+                                  : Palette.primary.withOpacity(0.5),
                             ),
                           ),
                           child: Text(
@@ -697,8 +728,8 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: isShop
-                                  ? Colors.blue[900]
-                                  : Colors.green[900],
+                                  ? Palette.secondary
+                                  : Palette.primary,
                               height: 1.1,
                             ),
                           ),
@@ -707,9 +738,9 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                         Expanded(
                           child: Text(
                             uploaderName,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 12,
-                              color: Colors.grey[600],
+                              color: Palette.textMedium,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -719,7 +750,10 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                     const SizedBox(height: 4),
                     Text(
                       formattedDate,
-                      style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Palette.textMedium,
+                      ),
                     ),
                   ],
                 ),
@@ -727,7 +761,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
 
               // ADMIN ACTIONS MENU
               IconButton(
-                icon: const Icon(Icons.more_vert),
+                icon: const Icon(Icons.more_vert, color: Palette.textMedium),
                 onPressed: () => _showAdminActions(context, data, postId),
               ),
             ],
@@ -776,12 +810,14 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
           children: [
             Row(
               children: [
-                const Icon(Icons.admin_panel_settings, color: Colors.orange),
+                const Icon(Icons.admin_panel_settings, color: Palette.tertiary),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     'Admin Actions',
-                    style: Theme.of(context).textTheme.titleLarge,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleLarge?.copyWith(color: Palette.textDark),
                   ),
                 ),
                 IconButton(
@@ -797,7 +833,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey[100],
+                color: Palette.background,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -808,6 +844,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
+                      color: Palette.textDark,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -824,9 +861,9 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                         }
                         return Text(
                           "User Email: $email",
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[700],
+                            color: Palette.textMedium,
                             fontFamily: 'monospace',
                           ),
                         );
@@ -841,7 +878,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
               context,
               'View Full Details',
               Icons.visibility,
-              Colors.blue,
+              Palette.primary,
               () {
                 Navigator.pop(context);
                 _viewPostDetails(context, data, postId);
@@ -853,7 +890,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
               context,
               'Delete Post Completely',
               Icons.delete_forever,
-              Colors.red,
+              Palette.error,
               () => _confirmDeletePost(context, data, postId),
             ),
             const SizedBox(height: 12),
@@ -862,7 +899,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
               context,
               'Send Warning to Owner',
               Icons.warning,
-              Colors.orange,
+              Palette.tertiary,
               () => _sendWarningToOwner(context, data, postId),
             ),
             const SizedBox(height: 12),
@@ -871,7 +908,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
               context,
               'View Comments',
               Icons.comment,
-              Colors.green,
+              Palette.primaryAccent,
               () => _viewPostComments(context, postId),
             ),
           ],
@@ -934,7 +971,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Post deleted successfully'),
-                      backgroundColor: Colors.green,
+                      backgroundColor: Palette.secondary,
                     ),
                   );
                 }
@@ -943,13 +980,13 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('Failed to delete: $e'),
-                      backgroundColor: Colors.red,
+                      backgroundColor: Palette.error,
                     ),
                   );
                 }
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: Palette.error),
             child: const Text('Delete Forever'),
           ),
         ],
@@ -1019,7 +1056,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Warning sent'),
-                        backgroundColor: Colors.orange,
+                        backgroundColor: Palette.tertiary,
                       ),
                     );
                   }
@@ -1053,7 +1090,7 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
           children: [
             Row(
               children: [
-                const Icon(Icons.comment, color: Colors.green),
+                const Icon(Icons.comment, color: Palette.primary),
                 const SizedBox(width: 12),
                 const Text(
                   'Post Comments',
@@ -1110,14 +1147,15 @@ class _PostsManagementTabState extends State<PostsManagementTab> {
                                     comment['username'] ?? 'Anonymous',
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
+                                      color: Palette.textDark,
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
                                     formattedDate,
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey[600],
+                                      color: Palette.textMedium,
                                     ),
                                   ),
                                 ],

@@ -167,7 +167,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                     content: Text(
                       "Report sent. Admin will review this shortly.",
                     ),
-                    backgroundColor: Colors.green,
+                    backgroundColor: const Color(0xFF7C9E6F),
                   ),
                 );
               }
@@ -302,8 +302,8 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
 
     switch (condition) {
       case 'New':
-        bgColor = Colors.green.shade50;
-        textColor = Colors.green.shade800;
+        bgColor = const Color(0xFF7C9E6F).withOpacity(0.1);
+        textColor = const Color(0xFF7C9E6F);
         break;
       case 'Refurbished':
         bgColor = Colors.orange.shade50;
@@ -352,8 +352,11 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openComments,
         backgroundColor: Colors.white,
-        icon: Icon(Icons.comment, color: Colors.green[800]),
-        label: Text("Comments", style: TextStyle(color: Colors.green[800])),
+        icon: const Icon(Icons.comment, color: Color(0xFF1A6EA0)),
+        label: const Text(
+          "Comments",
+          style: TextStyle(color: Color(0xFF1A6EA0)),
+        ),
       ),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -448,7 +451,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: Colors.green[800],
+                          color: const Color(0xFF1A6EA0),
                         ),
                       ),
                     ],
@@ -468,20 +471,22 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: isShop ? Colors.blue[50] : Colors.green[50],
+                          color: isShop
+                              ? const Color(0xFF7C9E6F).withOpacity(0.1)
+                              : const Color(0xFF1A6EA0).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: isShop
-                                ? Colors.blue[200]!
-                                : Colors.green[200]!,
+                                ? const Color(0xFF7C9E6F).withOpacity(0.5)
+                                : const Color(0xFF1A6EA0).withOpacity(0.5),
                           ),
                         ),
                         child: Text(
                           widget.data['poster_type'] ?? 'Individual',
                           style: TextStyle(
                             color: isShop
-                                ? Colors.blue[900]
-                                : Colors.green[900],
+                                ? const Color(0xFF7C9E6F)
+                                : const Color(0xFF1A6EA0),
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
                           ),
@@ -616,7 +621,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                                   "Closest Landmark: $landmark",
                                   style: TextStyle(
                                     fontSize: 14,
-                                    color: Colors.green[800],
+                                    color: const Color(0xFF1A6EA0),
                                     fontStyle: FontStyle.italic,
                                   ),
                                 ),
@@ -708,7 +713,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                             style: TextStyle(color: Colors.white),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
+                            backgroundColor: const Color(0xFF1A6EA0),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                         ),
@@ -739,7 +744,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                             style: TextStyle(color: Colors.white),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.teal,
+                            backgroundColor: const Color(0xFF7C9E6F),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                         ),

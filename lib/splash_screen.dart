@@ -18,6 +18,9 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  // 🟢 NEW: State for humanized feedback
+  String _statusMessage = "Initializing...";
+
   @override
   void initState() {
     super.initState();
@@ -27,6 +30,8 @@ class _SplashScreenState extends State<SplashScreen> {
 
   /// 1. Check Internet -> 2. Wait Delay -> 3. Check Auth/Restriction
   Future<void> _checkInternetAndStart() async {
+    setState(() => _statusMessage = "Establishing secure connection...");
+
     bool hasInternet = await _hasNetwork();
 
     if (!hasInternet) {
@@ -35,7 +40,8 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     // Artificial delay for branding (optional, keep if you like the animation)
-    await Future.delayed(const Duration(seconds: 3));
+    setState(() => _statusMessage = "Loading resources...");
+    await Future.delayed(const Duration(seconds: 2));
 
     _checkAuthAndRedirect();
   }
@@ -71,21 +77,24 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkAuthAndRedirect() async {
+    setState(() => _statusMessage = "Verifying identity...");
+
     final User? user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
+      // Small delay to let user read the status
+      await Future.delayed(const Duration(milliseconds: 500));
       _navigateTo(const LoginPage());
       return;
     }
 
     // 🟢 NEW: If Admin is logging in, run maintenance to clear expired restrictions for EVERYONE
     if (user.email == "agyekumpeter123@gmail.com") {
-      // We don't await this so it doesn't block the splash screen for too long,
-      // but it runs in the background.
       _performAdminMaintenance(user.uid);
     }
 
     // Sync basic info
+    setState(() => _statusMessage = "Syncing profile...");
     await _syncUserProfile(user);
 
     // Chat cleanup: Mark messages delivered & User online
@@ -126,6 +135,9 @@ class _SplashScreenState extends State<SplashScreen> {
           }
         }
       }
+
+      setState(() => _statusMessage = "Welcome back!");
+      await Future.delayed(const Duration(milliseconds: 500));
       _navigateTo(const HomePage());
     } catch (e) {
       // On error (e.g., offline cache issues), default to Home or Login
@@ -249,8 +261,11 @@ class _SplashScreenState extends State<SplashScreen> {
               reverse: true,
               repeat: true,
               fit: BoxFit.fill,
-              errorBuilder: (context, error, stackTrace) =>
-                  const Icon(Icons.flash_on, size: 100, color: Colors.green),
+              errorBuilder: (context, error, stackTrace) => const Icon(
+                Icons.flash_on,
+                size: 100,
+                color: Color(0xFF1A6EA0),
+              ),
             ),
             const SizedBox(height: 30),
             const Text(
@@ -258,7 +273,7 @@ class _SplashScreenState extends State<SplashScreen> {
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
-                color: Colors.green,
+                color: Color(0xFF1A6EA0),
                 letterSpacing: 2,
               ),
             ),
@@ -271,10 +286,39 @@ class _SplashScreenState extends State<SplashScreen> {
                 fontStyle: FontStyle.italic,
               ),
             ),
-            const SizedBox(height: 40),
-            const CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+
+            // 🟢 MODERNIZED SECTION
+            const SizedBox(height: 50),
+
+            // 1. Humanized Status Text
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 500),
+              child: Text(
+                _statusMessage,
+                key: ValueKey(_statusMessage),
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 15),
+
+            // 2. Sleek Linear Progress Indicator
+            Container(
+              width: 180,
+              height: 4,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const LinearProgressIndicator(
+                backgroundColor: Color(0xFFE0E0E0),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1A6EA0)),
+                borderRadius: BorderRadius.all(Radius.circular(10)),
+              ),
             ),
           ],
         ),

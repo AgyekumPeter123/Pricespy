@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart'; // 🟢 Added for email launching
+import 'package:url_launcher/url_launcher.dart';
 import 'sidebar_drawer.dart';
+import 'constants/palette.dart'; // 🟢 Import Palette
 
 class DisclaimerPage extends StatelessWidget {
   const DisclaimerPage({super.key});
 
-  // 🟢 NEW: Logic to open email
+  // 🟢 Logic to open email
   Future<void> _contactSupport(BuildContext context) async {
     final Uri emailLaunchUri = Uri(
       scheme: 'mailto',
@@ -36,9 +37,12 @@ class DisclaimerPage extends StatelessWidget {
       backgroundColor: Colors.white,
       drawer: const SidebarDrawer(),
       appBar: AppBar(
-        title: const Text("Safety & Terms"),
-        backgroundColor: Colors.green[800],
-        foregroundColor: Colors.white,
+        title: const Text(
+          "Safety & Terms",
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Palette.primary, // 🟢 Updated to Blue
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.sort),
@@ -54,17 +58,18 @@ class DisclaimerPage extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.green[50],
+                // 🟢 Updated to Blue tint
+                color: Palette.primary.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: Image.asset(
                 'assets/icon/app_icon.png',
                 height: 100,
                 width: 100,
-                errorBuilder: (c, o, s) => Icon(
+                errorBuilder: (c, o, s) => const Icon(
                   Icons.security_rounded,
                   size: 80,
-                  color: Colors.green[800],
+                  color: Palette.primary, // 🟢 Updated to Blue
                 ),
               ),
             ),
@@ -88,7 +93,7 @@ class DisclaimerPage extends StatelessWidget {
               content:
                   "Our 12-point GPS scan shows you items within your chosen radius. We do not share your exact coordinates with other users.",
               icon: Icons.radar,
-              color: Colors.blue,
+              color: Palette.primary, // 🟢 Consistent Blue
             ),
 
             _buildSafetySection(
@@ -120,7 +125,7 @@ class DisclaimerPage extends StatelessWidget {
               content:
                   "Use our secure chat for all negotiations. Never share personal OTPs, passwords, or pay for items you haven't seen in person.",
               icon: Icons.lock,
-              color: Colors.red,
+              color: Palette.error, // 🟢 Consistent Red
             ),
 
             _buildSafetySection(
@@ -128,7 +133,7 @@ class DisclaimerPage extends StatelessWidget {
               content:
                   "If you spot a scam or fake price, report it immediately. Our admin team investigates every report to keep the community safe.",
               icon: Icons.gavel_rounded,
-              color: Colors.teal,
+              color: Palette.secondary, // 🟢 Sage Green for "Community/Success"
             ),
 
             // 🟢 NEW: Direct Reporting Section
@@ -140,12 +145,12 @@ class DisclaimerPage extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.blueGrey.withValues(alpha: 0.1),
+                      color: Palette.textMedium.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
                       Icons.support_agent,
-                      color: Colors.blueGrey,
+                      color: Palette.textMedium,
                       size: 28,
                     ),
                   ),
@@ -177,12 +182,12 @@ class DisclaimerPage extends StatelessWidget {
                               onTap: () => _contactSupport(context),
                               child: Text(
                                 "Support Team.",
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.blue[800],
+                                  color: Palette.primary, // 🟢 Updated to Blue
                                   decoration: TextDecoration.underline,
-                                  decorationColor: Colors.blue[800],
+                                  decorationColor: Palette.primary,
                                   height: 1.5,
                                 ),
                               ),
@@ -210,24 +215,24 @@ class DisclaimerPage extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.red[50],
+                color: Palette.error.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.shade200),
+                border: Border.all(color: Palette.error.withOpacity(0.3)),
               ),
               child: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.warning_amber_rounded,
-                    color: Colors.red[800],
+                    color: Palette.error,
                     size: 30,
                   ),
                   const SizedBox(width: 15),
-                  Expanded(
+                  const Expanded(
                     child: Text(
                       "If a deal sounds too good to be true, it probably is. Stay vigilant!",
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFFB71C1C),
+                        color: Palette.error,
                         height: 1.4,
                       ),
                     ),
@@ -241,13 +246,13 @@ class DisclaimerPage extends StatelessWidget {
             // --- 4. FOOTER MESSAGE ---
             const Divider(),
             const SizedBox(height: 20),
-            Text(
+            const Text(
               "TRACK . COMPARE . SAVE",
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 4.0,
-                color: Colors.green[900],
+                color: Palette.primary, // 🟢 Updated to Blue
               ),
             ),
             const SizedBox(height: 40),
@@ -271,8 +276,7 @@ class DisclaimerPage extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              // 🟢 FIX: Replaced withOpacity with withValues
-              color: color.withValues(alpha: 0.1),
+              color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 28),

@@ -180,7 +180,7 @@ class _PriceTrendChartState extends State<PriceTrendChart> {
           // 🟢 1. Header Row
           Row(
             children: [
-              Icon(Icons.trending_up, color: Colors.green[800]),
+              const Icon(Icons.trending_up, color: Color(0xFF1A6EA0)),
               const SizedBox(width: 8),
               const Text(
                 "Price Trend (Nearby)",
@@ -193,12 +193,12 @@ class _PriceTrendChartState extends State<PriceTrendChart> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.1),
+              color: const Color(0xFF1A6EA0).withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
               "Tap dot to view",
-              style: TextStyle(fontSize: 10, color: Colors.green),
+              style: TextStyle(fontSize: 10, color: Color(0xFF1A6EA0)),
             ),
           ),
           const SizedBox(height: 20),
@@ -316,13 +316,13 @@ class _PriceTrendChartState extends State<PriceTrendChart> {
                   LineChartBarData(
                     spots: _spots,
                     isCurved: true,
-                    color: Colors.green[800],
+                    color: const Color(0xFF1A6EA0),
                     barWidth: 3,
                     isStrokeCapRound: true,
                     dotData: const FlDotData(show: true),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: Colors.green.withOpacity(0.1),
+                      color: const Color(0xFF1A6EA0).withOpacity(0.1),
                     ),
                   ),
                 ],

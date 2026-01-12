@@ -102,13 +102,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         Container(
                           padding: const EdgeInsets.all(30),
                           decoration: BoxDecoration(
-                            color: Colors.green.shade50,
+                            color: const Color(0xFF1A6EA0).withOpacity(0.1),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
                             _contents[index]['icon'],
                             size: 80,
-                            color: Colors.green[800],
+                            color: const Color(0xFF1A6EA0),
                           ),
                         ),
                         const SizedBox(height: 40),
@@ -117,7 +117,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
-                            color: Colors.green[900],
+                            color: const Color(0xFF1A6EA0),
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -155,7 +155,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         width: _currentIndex == index ? 24 : 8,
                         decoration: BoxDecoration(
                           color: _currentIndex == index
-                              ? Colors.green[800]
+                              ? const Color(0xFF1A6EA0)
                               : Colors.grey[300],
                           borderRadius: BorderRadius.circular(4),
                         ),
@@ -176,7 +176,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green[800],
+                      backgroundColor: const Color(0xFF1A6EA0),
                       shape: const CircleBorder(),
                       padding: const EdgeInsets.all(20),
                     ),

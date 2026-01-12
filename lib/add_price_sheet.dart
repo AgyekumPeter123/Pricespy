@@ -174,7 +174,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green[800],
+              backgroundColor: const Color(0xFF1A6EA0),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -556,7 +556,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Spy Report Saved!"),
-            backgroundColor: Colors.green,
+            backgroundColor: Color(0xFF7C9E6F),
           ),
         );
         Navigator.pop(context);
@@ -658,14 +658,14 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
               _buildModernTypeCard(
                 "Individual",
                 Icons.person_outline,
-                Colors.green,
+                const Color(0xFF1A6EA0),
                 'Individual',
               ),
               const SizedBox(width: 15),
               _buildModernTypeCard(
                 "Shop / Market",
                 Icons.storefront,
-                Colors.blue,
+                const Color(0xFF7C9E6F),
                 'Shop Owner',
               ),
             ],
@@ -738,7 +738,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
           margin: const EdgeInsets.only(bottom: 20),
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
           decoration: BoxDecoration(
-            color: Colors.green[50],
+            color: const Color(0xFF1A6EA0).withOpacity(0.1),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Row(
@@ -753,13 +753,13 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
                     centerSpaceRadius: 15,
                     sections: [
                       PieChartSectionData(
-                        color: Colors.green[800],
+                        color: const Color(0xFF1A6EA0),
                         value: qualityScore,
                         radius: 6,
                         showTitle: false,
                       ),
                       PieChartSectionData(
-                        color: Colors.green[200],
+                        color: const Color(0xFF1A6EA0).withOpacity(0.3),
                         value: 100 - qualityScore,
                         radius: 6,
                         showTitle: false,
@@ -775,7 +775,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
                   Text(
                     "Posting Quality: ${qualityScore.toInt()}%",
                     style: TextStyle(
-                      color: Colors.green[900],
+                      color: const Color(0xFF1A6EA0),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -784,7 +784,9 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
                         ? "Perfect! Ready to post."
                         : "Fill in details to reach 100%.",
                     style: TextStyle(
-                      color: isReady ? Colors.green[700] : Colors.redAccent,
+                      color: isReady
+                          ? const Color(0xFF7C9E6F)
+                          : Colors.redAccent,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -983,7 +985,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
           child: ElevatedButton(
             onPressed: (_isLoading || !isReady) ? null : _saveProduct,
             style: ElevatedButton.styleFrom(
-              backgroundColor: isReady ? Colors.green[800] : Colors.grey,
+              backgroundColor: isReady ? const Color(0xFF1A6EA0) : Colors.grey,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -1093,7 +1095,7 @@ class _AddPriceSheetState extends State<AddPriceSheet> {
               String value,
             ) {
               Color color = value == 'New'
-                  ? Colors.green
+                  ? const Color(0xFF7C9E6F)
                   : (value == 'Refurbished' ? Colors.orange : Colors.blueGrey);
               IconData icon = value == 'New'
                   ? Icons.check_circle_outline

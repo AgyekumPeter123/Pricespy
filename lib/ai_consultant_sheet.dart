@@ -3,6 +3,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'constants/palette.dart';
 
 class AiConsultantPage extends StatefulWidget {
   final Map<String, dynamic> predictionResult;
@@ -148,7 +149,7 @@ class _AiConsultantPageState extends State<AiConsultantPage> {
           decoration: BoxDecoration(
             // ✅ UPDATED: Matches ChurnPredictionPage (Green -> Teal)
             gradient: LinearGradient(
-              colors: [Colors.green[900]!, Colors.teal[700]!],
+              colors: [Palette.secondary, Palette.primaryAccent],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -157,7 +158,7 @@ class _AiConsultantPageState extends State<AiConsultantPage> {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Palette.background,
       body: Column(
         children: [
           Expanded(
@@ -187,7 +188,7 @@ class _AiConsultantPageState extends State<AiConsultantPage> {
                   Text(
                     "Agent is typing...",
                     style: TextStyle(
-                      color: Colors.grey[600],
+                      color: Palette.textMedium,
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -207,16 +208,20 @@ class _AiConsultantPageState extends State<AiConsultantPage> {
                 itemBuilder: (context, index) {
                   return ActionChip(
                     label: Text(_suggestedPrompts[index]),
-                    backgroundColor: Colors.green[50], // Updated to Green tint
+                    backgroundColor: Palette.secondary.withOpacity(
+                      0.1,
+                    ), // Updated to Green tint
                     labelStyle: TextStyle(
-                      color: Colors.green[900],
+                      color: Palette.secondary,
                       fontSize: 12,
                     ),
                     onPressed: () =>
                         _sendMessage(quickPrompt: _suggestedPrompts[index]),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
-                      side: BorderSide(color: Colors.green.withOpacity(0.2)),
+                      side: BorderSide(
+                        color: Palette.secondary.withOpacity(0.2),
+                      ),
                     ),
                   );
                 },
@@ -245,10 +250,10 @@ class _AiConsultantPageState extends State<AiConsultantPage> {
           // --- AI AVATAR (Left Side) ---
           if (!isUser) ...[
             CircleAvatar(
-              backgroundColor: Colors.indigo[100],
+              backgroundColor: Palette.primaryAccent.withOpacity(0.3),
               child: Icon(
                 Icons.smart_toy_outlined,
-                color: Colors.indigo[800],
+                color: Palette.primaryAccent,
                 size: 20,
               ),
             ),
@@ -260,7 +265,7 @@ class _AiConsultantPageState extends State<AiConsultantPage> {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: isUser ? Colors.blue[800] : Colors.white,
+                color: isUser ? Palette.primary : Palette.surface,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),

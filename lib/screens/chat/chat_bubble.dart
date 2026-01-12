@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/local_storage_service.dart';
 import '../../media_viewers.dart';
+import '../../constants/palette.dart';
 
 class ChatBubble extends StatelessWidget {
   final String docId;
@@ -50,9 +51,9 @@ class ChatBubble extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         color: isSelected
-            ? Colors.blue.withOpacity(0.2)
+            ? Palette.primary.withOpacity(0.2)
             : isHighlighted
-            ? Colors.yellow.withOpacity(0.3)
+            ? Palette.tertiary.withOpacity(0.3)
             : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Align(
@@ -65,7 +66,9 @@ class ChatBubble extends StatelessWidget {
             ),
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: isMe ? const Color(0xFFD9FDD3) : Colors.white,
+              color: isMe
+                  ? Palette.secondary.withOpacity(0.1)
+                  : Palette.surface,
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(12),
                 topRight: const Radius.circular(12),
@@ -122,7 +125,7 @@ class ChatBubble extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
           border: Border(
             left: BorderSide(
-              color: isMe ? Colors.green[800]! : Colors.purpleAccent,
+              color: isMe ? Palette.secondary : Palette.primaryAccent,
               width: 4,
             ),
           ),
@@ -150,7 +153,7 @@ class ChatBubble extends StatelessWidget {
                     data['replyToSender'] ?? 'User',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: isMe ? Colors.green[800] : Colors.purple,
+                      color: isMe ? Palette.secondary : Palette.primary,
                       fontSize: 12,
                     ),
                   ),
@@ -158,7 +161,10 @@ class ChatBubble extends StatelessWidget {
                     data['replyToText'] ?? '',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.black54, fontSize: 12),
+                    style: const TextStyle(
+                      color: Palette.textMedium,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -183,7 +189,11 @@ class ChatBubble extends StatelessWidget {
       children: [
         Text(
           formattedTime,
-          style: TextStyle(fontSize: 10, color: Colors.grey[600], height: 1.0),
+          style: TextStyle(
+            fontSize: 10,
+            color: Palette.textMedium,
+            height: 1.0,
+          ),
         ),
 
         if (isMe) ...[

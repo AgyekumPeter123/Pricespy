@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'sidebar_drawer.dart';
+import 'constants/palette.dart';
 
 class MyPostCommentsPage extends StatefulWidget {
   const MyPostCommentsPage({super.key});
@@ -53,9 +54,12 @@ class _MyPostCommentsPageState extends State<MyPostCommentsPage> {
     return Scaffold(
       drawer: const SidebarDrawer(),
       appBar: AppBar(
-        title: const Text("Comments"),
-        backgroundColor: Colors.green[800],
-        foregroundColor: Colors.white,
+        title: const Text(
+          "Comments",
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Palette.primary,
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.sort),
@@ -63,7 +67,7 @@ class _MyPostCommentsPageState extends State<MyPostCommentsPage> {
           ),
         ),
       ),
-      backgroundColor: Colors.grey[100],
+      backgroundColor: Palette.background,
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('posts')
@@ -225,7 +229,7 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Reply sent!"),
-            backgroundColor: Colors.green,
+            backgroundColor: Palette.secondary,
             duration: Duration(seconds: 1),
           ),
         );
@@ -236,7 +240,7 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text("Failed to send. Please retry."),
-            backgroundColor: Colors.red,
+            backgroundColor: Palette.error,
             action: SnackBarAction(
               label: 'Retry',
               textColor: Colors.white,
@@ -263,7 +267,7 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+            child: const Text("Delete", style: TextStyle(color: Palette.error)),
           ),
         ],
       ),
@@ -382,16 +386,16 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
                       placeholder: (context, url) => Container(
                         width: 50,
                         height: 50,
-                        color: Colors.grey[300],
+                        color: Palette.background,
                       ),
                       errorWidget: (context, url, error) => Container(
                         width: 50,
                         height: 50,
-                        color: Colors.grey[300],
+                        color: Palette.background,
                         child: const Icon(Icons.broken_image, size: 20),
                       ),
                     )
-                  : Container(width: 50, height: 50, color: Colors.grey[300]),
+                  : Container(width: 50, height: 50, color: Palette.background),
             ),
             title: Text(
               productName,
@@ -400,7 +404,9 @@ class _CommentThreadCardState extends State<_CommentThreadCard> {
             subtitle: Text(
               "${allDocs.length} comments",
               style: TextStyle(
-                color: allDocs.isNotEmpty ? Colors.green[800] : Colors.grey,
+                color: allDocs.isNotEmpty
+                    ? Palette.secondary
+                    : Palette.textMedium,
                 fontWeight: FontWeight.bold,
               ),
             ),

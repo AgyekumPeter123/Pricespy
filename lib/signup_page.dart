@@ -4,6 +4,7 @@ import 'package:lottie/lottie.dart';
 import 'splash_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'constants/palette.dart';
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -62,11 +63,11 @@ class _SignupPageState extends State<SignupPage> {
   }
 
   Color get _strengthColor {
-    if (_passwordStrength <= 0.2) return Colors.red;
-    if (_passwordStrength <= 0.4) return Colors.orange;
+    if (_passwordStrength <= 0.2) return Palette.error;
+    if (_passwordStrength <= 0.4) return Palette.tertiary;
     if (_passwordStrength <= 0.6) return Colors.yellow;
-    if (_passwordStrength <= 0.8) return Colors.blue;
-    return Colors.green;
+    if (_passwordStrength <= 0.8) return Palette.primary;
+    return Palette.secondary;
   }
   // Make sure to import this
 
@@ -153,18 +154,18 @@ class _SignupPageState extends State<SignupPage> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
+      SnackBar(content: Text(message), backgroundColor: Palette.error),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Palette.surface,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Palette.surface,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black),
+        iconTheme: const IconThemeData(color: Palette.textDark),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -172,12 +173,14 @@ class _SignupPageState extends State<SignupPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                "Create Account",
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+              Center(
+                child: const Text(
+                  "Create Account",
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Palette.primary,
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -230,7 +233,7 @@ class _SignupPageState extends State<SignupPage> {
                       _isPasswordVisible
                           ? Icons.visibility
                           : Icons.visibility_off,
-                      color: Colors.grey,
+                      color: Palette.textMedium,
                     ),
                     onPressed: () => setState(
                       () => _isPasswordVisible = !_isPasswordVisible,

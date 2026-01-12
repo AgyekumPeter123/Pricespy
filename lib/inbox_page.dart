@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'product_details_page.dart';
 import 'sidebar_drawer.dart';
+import 'constants/palette.dart';
 
 class InboxPage extends StatefulWidget {
   const InboxPage({super.key});
@@ -156,9 +157,12 @@ class _InboxPageState extends State<InboxPage> {
     return Scaffold(
       drawer: const SidebarDrawer(),
       appBar: AppBar(
-        title: const Text("Inbox"),
-        backgroundColor: Colors.green[800],
-        foregroundColor: Colors.white,
+        title: const Text(
+          "Inbox",
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Palette.primary,
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.sort),
@@ -174,7 +178,7 @@ class _InboxPageState extends State<InboxPage> {
           ),
         ],
       ),
-      backgroundColor: Colors.grey[100],
+      backgroundColor: Palette.background,
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('users')
@@ -196,11 +200,15 @@ class _InboxPageState extends State<InboxPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.inbox_outlined, size: 80, color: Colors.grey[400]),
+                  Icon(
+                    Icons.inbox_outlined,
+                    size: 80,
+                    color: Palette.textMedium,
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     "No notifications",
-                    style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                    style: TextStyle(fontSize: 18, color: Palette.textMedium),
                   ),
                 ],
               ),
@@ -235,7 +243,7 @@ class _InboxPageState extends State<InboxPage> {
                 key: Key(doc.id),
                 direction: DismissDirection.endToStart,
                 background: Container(
-                  color: Colors.red,
+                  color: Palette.error,
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 20),
                   child: const Icon(Icons.delete, color: Colors.white),
@@ -250,15 +258,15 @@ class _InboxPageState extends State<InboxPage> {
                   ),
                   tileColor: isRead
                       ? Colors.transparent
-                      : Colors.green.withOpacity(0.08),
+                      : Palette.secondary.withOpacity(0.08),
                   leading: CircleAvatar(
                     radius: 24,
                     backgroundColor: isRead
-                        ? Colors.grey[300]
-                        : Colors.green[800],
+                        ? Palette.background
+                        : Palette.secondary,
                     child: Icon(
                       _getIconForType(notifType),
-                      color: isRead ? Colors.grey[600] : Colors.white,
+                      color: isRead ? Palette.textMedium : Colors.white,
                       size: 22,
                     ),
                   ),

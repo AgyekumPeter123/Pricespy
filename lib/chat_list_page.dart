@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'screens/chat/chat_screen.dart';
 import 'encryption_service.dart';
 import 'sidebar_drawer.dart';
+import 'constants/palette.dart'; // 🟢 Import Palette
 
 class ChatListPage extends StatelessWidget {
   const ChatListPage({super.key});
@@ -19,7 +20,8 @@ class ChatListPage extends StatelessWidget {
       case 'delivered':
         return const Icon(Icons.done_all, size: 16, color: Colors.grey);
       case 'read':
-        return const Icon(Icons.done_all, size: 16, color: Colors.blueAccent);
+        // 🟢 Updated to Palette.primary (Deep Cerulean) instead of BlueAccent
+        return const Icon(Icons.done_all, size: 16, color: Palette.primary);
       default:
         return const SizedBox(width: 0);
     }
@@ -49,7 +51,7 @@ class ChatListPage extends StatelessWidget {
             content: Text(
               "Could not ${isPinned ? 'unpin' : 'pin'} chat. Permission denied.",
             ),
-            backgroundColor: Colors.red,
+            backgroundColor: Palette.error, // 🟢 Updated
           ),
         );
       }
@@ -62,9 +64,9 @@ class ChatListPage extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Cannot delete chat. Permission denied."),
-            backgroundColor: Colors.red,
+          SnackBar(
+            content: const Text("Cannot delete chat. Permission denied."),
+            backgroundColor: Palette.error, // 🟢 Updated
           ),
         );
       }
@@ -80,24 +82,37 @@ class ChatListPage extends StatelessWidget {
   ) {
     showModalBottomSheet(
       context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) {
         return Container(
           padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 15),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               Text(
                 "Options for $otherName",
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
+                  color: Palette.textDark,
                 ),
               ),
-              const Divider(),
+              const SizedBox(height: 10),
               ListTile(
                 leading: Icon(
                   isPinned ? Icons.push_pin_outlined : Icons.push_pin,
-                  color: Colors.blue,
+                  color: Palette.primary, // 🟢 Updated
                 ),
                 title: Text(isPinned ? "Unpin Chat" : "Pin Chat"),
                 onTap: () {
@@ -106,13 +121,17 @@ class ChatListPage extends StatelessWidget {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
+                leading: const Icon(
+                  Icons.delete,
+                  color: Palette.error,
+                ), // 🟢 Updated
                 title: const Text("Delete Chat"),
                 onTap: () {
                   Navigator.pop(ctx);
                   _deleteChat(context, chatId);
                 },
               ),
+              const SizedBox(height: 10),
             ],
           ),
         );
@@ -125,10 +144,16 @@ class ChatListPage extends StatelessWidget {
     final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Private Chats"),
-        backgroundColor: Colors.green[800],
-        foregroundColor: Colors.white,
+        title: const Text(
+          "Private Chats",
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Palette.primary,
+        elevation: 0,
+        centerTitle: true,
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.sort),
@@ -151,14 +176,37 @@ class ChatListPage extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text("No chats yet."));
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.chat_bubble_outline,
+                    size: 80,
+                    color: Colors.grey[300],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "No chats yet.",
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            );
           }
 
           var docs = snapshot.data!.docs;
 
           return ListView.separated(
-            separatorBuilder: (c, i) => const Divider(height: 1),
             itemCount: docs.length,
+            // 🟢 MODERN DIVIDER: Indented to align with text, subtle color
+            separatorBuilder: (c, i) => Divider(
+              height: 1,
+              thickness: 0.5,
+              indent: 84, // Skips the avatar area for a cleaner look
+              endIndent: 16,
+              color: Colors.grey.shade200,
+            ),
             itemBuilder: (context, index) {
               final doc = docs[index];
               final data = doc.data() as Map<String, dynamic>;
@@ -183,7 +231,7 @@ class ChatListPage extends StatelessWidget {
               final bool isMe = data['lastSenderId'] == myUid;
               final String lastStatus = data['lastMessageStatus'] ?? 'sent';
 
-              // --- 🟢 NEW LOGIC FOR CLEARED CHATS ---
+              // --- LOGIC FOR CLEARED CHATS ---
               String lastMsg = "Message";
               try {
                 lastMsg = EncryptionService.decryptMessage(
@@ -197,8 +245,6 @@ class ChatListPage extends StatelessWidget {
               final Timestamp? lastMsgTime = data['lastMessageTime'];
               final Timestamp? clearedAt = data['clearedAt_$myUid'];
 
-              // If clearedAt exists and is NEWER than the last message,
-              // it means the history was cleared and no new messages have arrived.
               bool isCleared = false;
               if (clearedAt != null && lastMsgTime != null) {
                 if (clearedAt.compareTo(lastMsgTime) > 0) {
@@ -208,61 +254,85 @@ class ChatListPage extends StatelessWidget {
               }
 
               return ListTile(
-                tileColor: isPinned ? Colors.grey[50] : null,
-                leading: CircleAvatar(
-                  radius: 26,
-                  backgroundColor: Colors.grey[300],
-                  backgroundImage: (otherPhoto != null && otherPhoto.isNotEmpty)
-                      ? CachedNetworkImageProvider(otherPhoto)
-                      : null,
-                  child: (otherPhoto == null || otherPhoto.isEmpty)
-                      ? const Icon(Icons.person, color: Colors.white)
-                      : null,
+                // 🟢 PINNED HIGHLIGHT: Subtle blue tint instead of grey
+                tileColor: isPinned ? Palette.primary.withOpacity(0.03) : null,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
                 ),
-                title: Row(
+                leading: Stack(
                   children: [
-                    Expanded(
-                      child: Text(
-                        otherName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    CircleAvatar(
+                      radius: 28,
+                      backgroundColor: Colors.grey[200],
+                      backgroundImage:
+                          (otherPhoto != null && otherPhoto.isNotEmpty)
+                          ? CachedNetworkImageProvider(otherPhoto)
+                          : null,
+                      child: (otherPhoto == null || otherPhoto.isEmpty)
+                          ? const Icon(Icons.person, color: Colors.grey)
+                          : null,
                     ),
                     if (isPinned)
-                      const Icon(Icons.push_pin, size: 14, color: Colors.grey),
-                  ],
-                ),
-                subtitle: Row(
-                  children: [
-                    if (isMe && !isCleared) ...[
-                      _buildStatusIcon(lastStatus),
-                      const SizedBox(width: 4),
-                    ],
-                    Expanded(
-                      child: Text(
-                        lastMsg,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: isCleared
-                              ? Colors.grey.shade400
-                              : (unreadCount > 0
-                                    ? Colors.black87
-                                    : Colors.grey[600]),
-                          fontWeight: unreadCount > 0
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          fontStyle: isCleared
-                              ? FontStyle.italic
-                              : FontStyle.normal,
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.push_pin,
+                            size: 14,
+                            color: Palette.primary, // 🟢 Updated
+                          ),
                         ),
                       ),
-                    ),
                   ],
+                ),
+                title: Text(
+                  otherName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Palette.textDark, // 🟢 Updated
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
+                  child: Row(
+                    children: [
+                      if (isMe && !isCleared) ...[
+                        _buildStatusIcon(lastStatus),
+                        const SizedBox(width: 4),
+                      ],
+                      Expanded(
+                        child: Text(
+                          lastMsg,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isCleared
+                                ? Colors.grey.shade400
+                                : (unreadCount > 0
+                                      ? Palette
+                                            .textDark // 🟢 Darker if unread
+                                      : Palette.textMedium),
+                            fontWeight: unreadCount > 0
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                            fontStyle: isCleared
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -273,22 +343,20 @@ class ChatListPage extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         color: unreadCount > 0
-                            ? Colors.green[800]
-                            : Colors.grey,
+                            ? Palette
+                                  .primary // 🟢 Blue if unread
+                            : Palette.textMedium,
                         fontWeight: unreadCount > 0
                             ? FontWeight.bold
                             : FontWeight.normal,
                       ),
                     ),
+                    const SizedBox(height: 6),
                     if (unreadCount > 0)
                       Container(
-                        margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.green[800],
+                        padding: const EdgeInsets.all(6),
+                        decoration: const BoxDecoration(
+                          color: Palette.tertiary, // 🟢 Coral for unread badge
                           shape: BoxShape.circle,
                         ),
                         child: Text(

@@ -6,6 +6,7 @@ import 'signup_page.dart';
 import 'splash_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'constants/palette.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -102,7 +103,7 @@ class _LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Reset link sent! Check your inbox."),
-            backgroundColor: Colors.green,
+            backgroundColor: Palette.secondary,
           ),
         );
       }
@@ -214,7 +215,7 @@ class _LoginPageState extends State<LoginPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isWarning ? Colors.orange : Colors.red,
+        backgroundColor: isWarning ? Palette.tertiary : Palette.error,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
@@ -224,7 +225,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Palette.surface,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -235,7 +236,7 @@ class _LoginPageState extends State<LoginPage> {
                 const Icon(
                   Icons.lock_outline_rounded,
                   size: 80,
-                  color: Colors.green,
+                  color: Palette.primary,
                 ),
                 const SizedBox(height: 10),
                 SizedBox(
@@ -248,7 +249,7 @@ class _LoginPageState extends State<LoginPage> {
                 Text(
                   "Sign in to continue tracking prices",
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 16, color: Palette.textMedium),
                 ),
                 const SizedBox(height: 30),
                 TextField(
@@ -274,7 +275,7 @@ class _LoginPageState extends State<LoginPage> {
                         _isPasswordVisible
                             ? Icons.visibility
                             : Icons.visibility_off,
-                        color: Colors.grey,
+                        color: Palette.textMedium,
                       ),
                       onPressed: () => setState(
                         () => _isPasswordVisible = !_isPasswordVisible,
@@ -292,7 +293,7 @@ class _LoginPageState extends State<LoginPage> {
                     child: Text(
                       "Forgot Password?",
                       style: TextStyle(
-                        color: Colors.green[700],
+                        color: Palette.secondary,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -302,7 +303,7 @@ class _LoginPageState extends State<LoginPage> {
                 ElevatedButton(
                   onPressed: _isLoading ? null : _login,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: Palette.secondary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(

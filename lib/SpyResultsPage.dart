@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'home_page.dart';
+import 'constants/palette.dart';
 
 class SpyResultsPage extends StatelessWidget {
   final String keyword;
@@ -126,13 +127,13 @@ class SpyResultsPage extends StatelessWidget {
     final timeLimit = DateTime.now().subtract(const Duration(hours: 48));
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: Palette.background,
       appBar: AppBar(
         title: Text(
           "Spy Results: $keyword",
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.green[800],
+        backgroundColor: Palette.secondary,
         foregroundColor: Colors.white,
       ),
       body: Column(
@@ -147,12 +148,12 @@ class SpyResultsPage extends StatelessWidget {
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+                  color: Palette.surface,
+                  border: Border(bottom: BorderSide(color: Palette.background)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.radar, size: 20, color: Colors.blue),
+                    const Icon(Icons.radar, size: 20, color: Palette.primary),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
@@ -160,7 +161,7 @@ class SpyResultsPage extends StatelessWidget {
                             ? "Calculating coverage..."
                             : snapshot.data ?? "",
                         style: TextStyle(
-                          color: Colors.blue[900],
+                          color: Palette.primary,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
@@ -232,7 +233,7 @@ class SpyResultsPage extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.search_off, size: 80, color: Colors.grey[300]),
+          Icon(Icons.search_off, size: 80, color: Palette.background),
           const SizedBox(height: 20),
           const Text(
             "No exact matches found nearby.",
@@ -241,7 +242,7 @@ class SpyResultsPage extends StatelessWidget {
           const SizedBox(height: 5),
           const Text(
             "Try increasing your radius in the Alert settings.",
-            style: TextStyle(color: Colors.grey),
+            style: TextStyle(color: Palette.textMedium),
           ),
         ],
       ),

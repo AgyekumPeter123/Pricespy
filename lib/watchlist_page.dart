@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'sidebar_drawer.dart';
 import 'SpyResultsPage.dart'; // REQUIRED IMPORT
+import 'constants/palette.dart';
 
 class WatchlistPage extends StatefulWidget {
   const WatchlistPage({super.key});
@@ -209,7 +210,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
               height: 20,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: Colors.white,
+                color: Palette.surface,
               ),
             ),
             const SizedBox(width: 15),
@@ -260,10 +261,10 @@ class _WatchlistPageState extends State<WatchlistPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Spy found $matchCount item(s)!"),
-            backgroundColor: Colors.green[800],
+            backgroundColor: Palette.secondary,
             action: SnackBarAction(
               label: "VIEW",
-              textColor: Colors.yellow,
+              textColor: Palette.primaryAccent,
               onPressed: () {
                 Navigator.push(
                   context,
@@ -335,7 +336,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Palette.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
@@ -381,7 +382,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                         width: 40,
                         height: 4,
                         decoration: BoxDecoration(
-                          color: Colors.grey[300],
+                          color: Palette.background,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -401,7 +402,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                         labelText: "Keyword",
                         hintText: "e.g. Cement, Rice",
                         filled: true,
-                        fillColor: Colors.grey[50],
+                        fillColor: Palette.background,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -416,7 +417,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                       decoration: InputDecoration(
                         labelText: "Max Price (₵)", // Cedi
                         filled: true,
-                        fillColor: Colors.grey[50],
+                        fillColor: Palette.background,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -437,7 +438,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                         Text(
                           "${radius.round()} km",
                           style: TextStyle(
-                            color: Colors.green[800],
+                            color: Palette.secondary,
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
@@ -449,7 +450,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                       min: 1,
                       max: 100,
                       divisions: 99,
-                      activeColor: Colors.green[800],
+                      activeColor: Palette.secondary,
                       onChanged: (val) => setModalState(() {
                         _scanSessionId++;
                         radius = val;
@@ -481,7 +482,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                           isFetching ? "Scanning..." : "Check Coverage",
                         ),
                         style: TextButton.styleFrom(
-                          foregroundColor: Colors.blue,
+                          foregroundColor: Palette.primary,
                         ),
                       ),
                     ),
@@ -500,7 +501,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                             child: Icon(
                               Icons.location_on,
                               size: 16,
-                              color: Colors.green,
+                              color: Palette.secondary,
                             ),
                           ),
                         ),
@@ -512,13 +513,13 @@ class _WatchlistPageState extends State<WatchlistPage> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.blue[50],
+                        color: Palette.background,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         contextText,
                         style: TextStyle(
-                          color: Colors.blue[900],
+                          color: Palette.primary,
                           fontSize: 13,
                           height: 1.3,
                         ),
@@ -531,7 +532,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                       width: double.infinity,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[800],
+                          backgroundColor: Palette.secondary,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -589,7 +590,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                             content: Text(
                                               "An alert with this name and price already exists!",
                                             ),
-                                            backgroundColor: Colors.orange,
+                                            backgroundColor: Palette.tertiary,
                                           ),
                                         );
                                       }
@@ -637,7 +638,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                                 ? "Spy Updated!"
                                                 : "Spy Activated! You can now scan for items.",
                                           ),
-                                          backgroundColor: Colors.green,
+                                          backgroundColor: Palette.secondary,
                                         ),
                                       );
                                     }
@@ -649,7 +650,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                       ).showSnackBar(
                                         SnackBar(
                                           content: Text("Error: $e"),
-                                          backgroundColor: Colors.red,
+                                          backgroundColor: Palette.error,
                                         ),
                                       );
                                     }
@@ -661,14 +662,14 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                 height: 20,
                                 width: 20,
                                 child: CircularProgressIndicator(
-                                  color: Colors.white,
+                                  color: Palette.surface,
                                   strokeWidth: 2,
                                 ),
                               )
                             : Text(
                                 isEditing ? "UPDATE SPY" : "ACTIVATE SPY",
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: TextStyle(
+                                  color: Palette.surface,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -689,12 +690,15 @@ class _WatchlistPageState extends State<WatchlistPage> {
     if (user == null)
       return const Scaffold(body: Center(child: Text("Login required")));
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: Palette.background,
       drawer: const SidebarDrawer(),
       appBar: AppBar(
-        title: const Text("My Spy Alerts"),
-        backgroundColor: Colors.green[800],
-        foregroundColor: Colors.white,
+        title: const Text(
+          "My Spy Alerts",
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Palette.primary,
         elevation: 0,
         leading: Builder(
           builder: (context) => IconButton(
@@ -705,12 +709,12 @@ class _WatchlistPageState extends State<WatchlistPage> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddAlertSheet(),
-        backgroundColor: Colors.green[800],
+        backgroundColor: Palette.primary,
         elevation: 4,
-        icon: const Icon(Icons.add_location_alt_outlined, color: Colors.white),
-        label: const Text(
+        icon: Icon(Icons.add_location_alt_outlined, color: Palette.surface),
+        label: Text(
           "New Spy",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(color: Palette.surface, fontWeight: FontWeight.bold),
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -726,15 +730,15 @@ class _WatchlistPageState extends State<WatchlistPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.radar, size: 80, color: Colors.grey[300]),
+                  Icon(Icons.radar, size: 80, color: Palette.background),
                   const SizedBox(height: 16),
                   Text(
                     "No active spies.",
-                    style: TextStyle(color: Colors.grey[500], fontSize: 18),
+                    style: TextStyle(color: Palette.textMedium, fontSize: 18),
                   ),
                   Text(
                     "Tap '+ New Spy' to track items nearby.",
-                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
+                    style: TextStyle(color: Palette.textMedium, fontSize: 14),
                   ),
                 ],
               ),
@@ -757,10 +761,10 @@ class _WatchlistPageState extends State<WatchlistPage> {
                   padding: const EdgeInsets.only(right: 20),
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: Colors.red[100],
+                    color: Palette.background,
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Icon(Icons.delete, color: Colors.red[800]),
+                  child: Icon(Icons.delete, color: Palette.error),
                 ),
                 confirmDismiss: (direction) async {
                   return await showDialog(
@@ -778,9 +782,9 @@ class _WatchlistPageState extends State<WatchlistPage> {
                           ),
                           TextButton(
                             onPressed: () => Navigator.of(context).pop(true),
-                            child: const Text(
+                            child: Text(
                               "Delete",
-                              style: TextStyle(color: Colors.red),
+                              style: TextStyle(color: Palette.error),
                             ),
                           ),
                         ],
@@ -803,11 +807,11 @@ class _WatchlistPageState extends State<WatchlistPage> {
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: Palette.surface,
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
+                        color: Palette.textDark.withOpacity(0.1),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -823,12 +827,12 @@ class _WatchlistPageState extends State<WatchlistPage> {
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: Colors.green[50],
+                                color: Palette.background,
                                 shape: BoxShape.circle,
                               ),
                               child: Icon(
                                 Icons.satellite_alt,
-                                color: Colors.green[800],
+                                color: Palette.secondary,
                                 size: 24,
                               ),
                             ),
@@ -841,10 +845,10 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                   // TITLE SAFETY
                                   Text(
                                     data['keyword'] ?? 'Unknown',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 18,
-                                      color: Colors.black87,
+                                      color: Palette.textDark,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -861,7 +865,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                             vertical: 4,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.grey[100],
+                                            color: Palette.background,
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
@@ -872,7 +876,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                               Icon(
                                                 Icons.payments_outlined,
                                                 size: 14,
-                                                color: Colors.grey[600],
+                                                color: Palette.textMedium,
                                               ),
                                               const SizedBox(width: 4),
                                               // TEXT SAFETY
@@ -880,7 +884,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                                 child: Text(
                                                   "Max: ₵${data['max_price']}",
                                                   style: TextStyle(
-                                                    color: Colors.grey[800],
+                                                    color: Palette.textDark,
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.w600,
                                                   ),
@@ -901,7 +905,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                             vertical: 4,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.grey[100],
+                                            color: Palette.background,
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
@@ -912,7 +916,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                               Icon(
                                                 Icons.radar,
                                                 size: 14,
-                                                color: Colors.grey[600],
+                                                color: Palette.textMedium,
                                               ),
                                               const SizedBox(width: 4),
                                               // TEXT SAFETY
@@ -920,7 +924,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                                 child: Text(
                                                   "${data['radius_km']} km",
                                                   style: TextStyle(
-                                                    color: Colors.grey[800],
+                                                    color: Palette.textDark,
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.w600,
                                                   ),
@@ -941,7 +945,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
                         ),
                       ),
                       // 2. DIVIDER
-                      Divider(height: 1, color: Colors.grey[200]),
+                      Divider(height: 1, color: Palette.background),
 
                       // 3. BOTTOM ACTION ROW
                       Padding(
@@ -958,14 +962,14 @@ class _WatchlistPageState extends State<WatchlistPage> {
                                   existingData: data,
                                   docId: docId,
                                 ),
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.edit_outlined,
                                   size: 18,
-                                  color: Colors.grey,
+                                  color: Palette.textMedium,
                                 ),
-                                label: const Text(
+                                label: Text(
                                   "Edit",
-                                  style: TextStyle(color: Colors.grey),
+                                  style: TextStyle(color: Palette.textMedium),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 style: TextButton.styleFrom(
@@ -979,21 +983,21 @@ class _WatchlistPageState extends State<WatchlistPage> {
                             Container(
                               width: 1,
                               height: 24,
-                              color: Colors.grey[300],
+                              color: Palette.background,
                             ),
                             // Scan Button (Expanded 50%)
                             Expanded(
                               child: TextButton.icon(
                                 onPressed: () => _triggerManualSpy(data),
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.radar,
                                   size: 18,
-                                  color: Colors.blue,
+                                  color: Palette.primary,
                                 ),
-                                label: const Text(
+                                label: Text(
                                   "Scan Now",
                                   style: TextStyle(
-                                    color: Colors.blue,
+                                    color: Palette.primary,
                                     fontWeight: FontWeight.bold,
                                   ),
                                   overflow: TextOverflow.ellipsis,
@@ -1030,13 +1034,13 @@ class _MiniRadarPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
     final linePaint = Paint()
-      ..color = Colors.grey.withOpacity(0.3)
+      ..color = Palette.textMedium.withOpacity(0.3)
       ..style = PaintingStyle.stroke;
     final fillPaint = Paint()
-      ..color = Colors.green.withOpacity(0.2)
+      ..color = Palette.secondary.withOpacity(0.2)
       ..style = PaintingStyle.fill;
     final borderPaint = Paint()
-      ..color = Colors.green[700]!
+      ..color = Palette.secondary
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
 

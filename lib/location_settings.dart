@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'sidebar_drawer.dart';
+import 'constants/palette.dart';
 
 class LocationSettingsPage extends StatefulWidget {
   const LocationSettingsPage({super.key});
@@ -286,9 +287,12 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
     return Scaffold(
       drawer: const SidebarDrawer(),
       appBar: AppBar(
-        title: const Text("Discovery Settings"),
-        backgroundColor: Colors.green[800],
-        foregroundColor: Colors.white,
+        title: const Text(
+          "Discovery Settings",
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Palette.primary,
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.sort),
@@ -307,7 +311,7 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   "Search Radius",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w400),
                 ),
               ),
               const SizedBox(height: 8),
@@ -321,10 +325,10 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
               const SizedBox(height: 20),
               SliderTheme(
                 data: SliderTheme.of(context).copyWith(
-                  activeTrackColor: Colors.green[800],
-                  thumbColor: Colors.green[800],
-                  overlayColor: Colors.green.withOpacity(0.2),
-                  valueIndicatorColor: Colors.green[800],
+                  activeTrackColor: const Color(0xFF1A6EA0),
+                  thumbColor: const Color(0xFF1A6EA0),
+                  overlayColor: const Color(0xFF1A6EA0).withOpacity(0.2),
+                  valueIndicatorColor: const Color(0xFF1A6EA0),
                 ),
                 child: Slider(
                   value: _radiusKm,
@@ -449,7 +453,7 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
                   child: Center(
                     child: Icon(
                       Icons.my_location,
-                      color: Colors.green[800],
+                      color: const Color(0xFF1A6EA0),
                       size: 24,
                     ),
                   ),
@@ -484,7 +488,7 @@ class _LocationSettingsPageState extends State<LocationSettingsPage> {
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green[800],
+                    backgroundColor: const Color(0xFF1A6EA0),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -525,10 +529,10 @@ class _RadarChartPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     final fillPaint = Paint()
-      ..color = Colors.green.withOpacity(0.2)
+      ..color = const Color(0xFF1A6EA0).withOpacity(0.2)
       ..style = PaintingStyle.fill;
     final borderPaint = Paint()
-      ..color = Colors.green[700]!
+      ..color = const Color(0xFF1A6EA0)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
 
